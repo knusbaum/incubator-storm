@@ -27,6 +27,7 @@
   (:use [backtype.storm bootstrap util])
   (:use [backtype.storm.config :only [validate-configs-with-schemas]])
   (:use [backtype.storm.daemon common])
+  (:require [backtype.storm.ui.timelineServer :as ats])
   (:gen-class
     :methods [^{:static true} [launch [backtype.storm.scheduler.INimbus] void]]))
 
@@ -634,6 +635,27 @@
 (defn- to-worker-slot [[node port]]
   (WorkerSlot. node port))
 
+(defn mk-topology-id->executor->component [topologies]
+  (let [topology-id->executor->component
+        (into {}
+              (map
+               (fn [topology-details]
+                 [(.getId topology-details)
+                  (into {}
+                        (for [[executor component] (.getExecutorToComponent topology-details)]
+                          [[(.getStartTask executor) (.getEndTask executor)] component]))])
+               (.getTopologies topologies)))]
+    topology-id->executor->component))
+
+(defn mk-executor->component-name+host+port [topology-id->executor->component assignment topology-id]
+  (let [executor->component (get topology-id->executor->component topology-id)]
+    {"components"
+     (for [[executor [node port]] (:executor->node+port assignment)]
+       {"component" (get executor->component executor)
+        "host" (get (:node->host assignment) node)
+        "port" port
+        "executor" (pr-str executor)})}))
+
 ;; get existing assignment (just the executor->node+port map) -> default to {}
 ;; filter out ones which have a executor timeout
 ;; figure out available slots on cluster. add to that the used valid slots to get total slots. figure out how many executors should be in each slot (e.g., 4, 4, 4, 5)
@@ -689,7 +711,8 @@
                                                  (master-stormdist-root conf topology-id)
                                                  (select-keys all-node->host all-nodes)
                                                  executor->node+port
-                                                 start-times)}))]
+                                                 start-times)}))
+        topology-id->executor->component (mk-topology-id->executor->component topologies)]
 
     ;; tasks figure out what tasks to talk to by looking at topology at runtime
     ;; only log/set when there's been a change to the assignment
@@ -699,9 +722,12 @@
       (if (= existing-assignment assignment)
         (log-debug "Assignment for " topology-id " hasn't changed")
         (do
-          (log-message "Setting new assignment for topology id " topology-id ": " (pr-str assignment))
-          (.set-assignment! storm-cluster-state topology-id assignment)
-          )))
+          (let [;executor-summaries (.get_executors (.getTopologyInfo nimbus topology-id))
+                executor->component+node+port (mk-executor->component-name+host+port topology-id->executor->component assignment topology-id)]
+            (log-debug "Setting new assignment for topology id " topology-id ": " (pr-str assignment))
+            (ats/send-topology-timeline-data "storm"  topology-id (.toString (uuid)) "reassignment"
+                                             executor->component+node+port))
+          (.set-assignment! storm-cluster-state topology-id assignment))))
     (->> new-assignments
           (map (fn [[topology-id assignment]]
             (let [existing-assignment (get existing-assignments topology-id)]
@@ -833,8 +859,9 @@
 (defn- file-older-than? [now seconds file]
   (<= (+ (.lastModified file) (to-millis seconds)) (to-millis now)))
 
-(defn clean-inbox [dir-location seconds]
+(defn clean-inbox
   "Deletes jar files in dir older than seconds."
+  [dir-location seconds]
   (let [now (current-time-secs)
         pred #(and (.isFile %) (file-older-than? now seconds %))
         files (filter pred (file-seq (File. dir-location)))]

@@ -64,6 +64,16 @@
 </table>
 </script>
 
+<script id="history-template" type="text/html">
+<table class="zebra-striped" id="history-server-table"><thead><tr><th>Topology ID</th></tr></thead>
+  <tbody>
+    {{#topology}}
+    <tr>
+      <td><a href="/timeline.html?id={{topologyId}}">{{topologyId}}</a></td>
+    </tr>
+    {{/topology}}
+</script>
+
 <script id="configuration-template" type="text/html">
 <table class="zebra-striped" id="nimbus-configuration-table"><thead><tr><th>Key</th><th>Value</th></tr></thead>
 <tbody>

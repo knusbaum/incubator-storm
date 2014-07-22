@@ -34,7 +34,8 @@
   (:require [compojure.route :as route]
             [compojure.handler :as handler]
             [ring.util.response :as resp]
-            [backtype.storm [thrift :as thrift]])
+            [backtype.storm [thrift :as thrift]]
+            [backtype.storm.ui.timelineServer :as ats])
   (:import [org.apache.commons.lang StringEscapeUtils])
   (:gen-class))
 
@@ -875,7 +876,10 @@
         (.killTopologyWithOpts nimbus name options)
         (log-message "Killing topology '" name "' with wait time: " wait-time " secs")))
     (resp/redirect (str "/api/v1/topology/" id)))
-
+  (GET "/api/v1/timeline/topologies" []
+       (ats/get-topology-list))
+  (GET "/api/v1/timeline/:topology-id" [topology-id]
+       (ats/get-topology-data topology-id))
   (GET "/" [:as {cookies :cookies}]
        (resp/redirect "/index.html"))
   (route/resources "/")

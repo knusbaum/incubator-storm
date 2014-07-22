@@ -36,6 +36,9 @@
 <h2>Supervisor summary</h2>
 <div id="supervisor-summary">
 </div>
+<h2>Topology History</h2>
+<div id="history-server">
+</div>
 <h2>Nimbus Configuration</h2>
 <div id="nimbus-configuration"></div>
 <div id="json-response-error"></div>
@@ -54,6 +57,7 @@ $(document).ready(function() {
     var clusterSummary = $("#cluster-summary");
     var topologySummary = $("#topology-summary");
     var supervisorSummary = $("#supervisor-summary");
+    var historyServer = $("#history-server");
     var config = $("#nimbus-configuration");
 
     $.getJSON("/api/v1/cluster/summary",function(response,status,jqXHR) {
@@ -82,6 +86,14 @@ $(document).ready(function() {
       $.get("/templates/index-page-template.html", function(template) {
           config.append(Mustache.render($(template).filter("#configuration-template").html(),formattedResponse));
           $("#nimbus-configuration-table").tablesorter({ sortList: [[0,0]], headers: {}});
+      });
+    });
+    $.getJSON("/api/v1/timeline/topologies", function(response,status,jqXHR) {
+      $.get("/templates/index-page-template.html", function(template) {
+          historyServer.append(Mustache.render($(template).filter("#history-template").html(),response));
+          if(response["topology"].length > 0) {
+              $("#history-server-table").tablesorter({ sortList: [[0,0]], headers: {}});
+          }
       });
     });
   });

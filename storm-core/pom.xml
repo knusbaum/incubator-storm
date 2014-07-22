@@ -76,6 +76,10 @@
             <artifactId>clojure-complete</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+          <groupId>clj-http</groupId>
+          <artifactId>clj-http</artifactId>
+        </dependency>
 
         <!--java-->
         <dependency>
@@ -181,6 +185,36 @@
         	<artifactId>junit</artifactId>
         	<version>4.1</version>
         	<scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-common</artifactId>
+          <version>2.4.0</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.slf4j</groupId>
+              <artifactId>slf4j-log4j12</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>log4j</groupId>
+              <artifactId>log3j</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-client</artifactId>
+          <version>2.4.0</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.slf4j</groupId>
+              <artifactId>slf4j-log4j12</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>log4j</groupId>
+              <artifactId>log3j</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
     </dependencies>
     <build>
