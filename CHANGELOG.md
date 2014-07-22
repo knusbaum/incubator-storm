@@ -7,6 +7,23 @@
  * STORM-183: Replacing RunTime.halt() with RunTime.exit()
  * STORM-213: Decouple In-Process ZooKeeper from LocalCluster.
  * STORM-365: Add support for Python 3 to storm command.
+ * STORM-332: Enable Kryo serialization in storm-kafka
+ * STORM-370: Add check for empty table before sorting dom in UI
+ * STORM-359: add logviewer paging and download
+ * STORM-372: Typo in storm_env.ini
+ * STORM-266: Adding shell process pid and name in the log message
+ * STORM-367: Storm UI REST api documentation.
+ * STORM-200: Proposal for Multilang's Metrics feature
+ * STORM-351: multilang python process fall into endless loop
+ * STORM-375: Smarter downloading of assignments by supervisors and workers
+ * STORM-328: More restrictive Config checks, strict range check within Utils.getInt()
+ * STORM-381: Replace broken jquery.tablesorter.min.js to latest
+ * STORM-312: add storm monitor tools to monitor throughtput interactively
+ * STORM-354: Testing: allow users to pass TEST-TIMEOUT-MS as param for complete-topology
+ * STORM-254: one Spout/Bolt can register metric twice with same name in different timeBucket
+ * STORM-403: heartbeats-to-nimbus in supervisor-test failed due to uninten...
+ * STORM-402: FileNotFoundException when using storm with apache tika
+ * STORM-364: The exception time display as default timezone.
 
 ## 0.9.2-incubating
  * STORM-66: send taskid on initial handshake
