@@ -723,8 +723,9 @@
       (if (= existing-assignment assignment)
         (log-debug "Assignment for " topology-id " hasn't changed")
         (do
-          (let [;executor-summaries (.get_executors (.getTopologyInfo nimbus topology-id))
-                executor->component+node+port (mk-executor->component-name+host+port topology-id->executor->component assignment topology-id conf)]
+          (let [executor->component+node+port 
+                (mk-executor->component-name+host+port topology-id->executor->component 
+                                                       assignment topology-id conf)]
             (log-debug "Setting new assignment for topology id " topology-id ": " (pr-str assignment))
             (ats/send-topology-timeline-data "storm"  topology-id (.toString (uuid)) "reassignment"
                                              executor->component+node+port))
@@ -860,9 +861,8 @@
 (defn- file-older-than? [now seconds file]
   (<= (+ (.lastModified file) (to-millis seconds)) (to-millis now)))
 
-(defn clean-inbox
+(defn clean-inbox [dir-location seconds]
   "Deletes jar files in dir older than seconds."
-  [dir-location seconds]
   (let [now (current-time-secs)
         pred #(and (.isFile %) (file-older-than? now seconds %))
         files (filter pred (file-seq (File. dir-location)))]
