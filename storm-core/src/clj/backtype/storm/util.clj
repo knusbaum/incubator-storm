@@ -950,3 +950,11 @@
 
 (defn hashmap-to-persistent [^HashMap m]
   (zipmap (.keySet m) (.values m)))
+
+(defn url-format [fmt & args]
+  (String/format fmt 
+                 (to-array (map #(url-encode (str %)) args))))
+
+(defn worker-log-link [host port conf]
+  (url-format "http://%s:%s/log?file=worker-%s.log"
+              host (conf Config/LOGVIEWER_PORT) port))

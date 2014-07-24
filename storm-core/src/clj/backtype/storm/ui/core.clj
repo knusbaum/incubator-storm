@@ -263,10 +263,6 @@
               (bolt-comp-summs id))]
     (sort-by #(-> ^ExecutorSummary % .get_executor_info .get_task_start) ret)))
 
-(defn worker-log-link [host port]
-  (url-format "http://%s:%s/log?file=worker-%s.log"
-              host (*STORM-CONF* LOGVIEWER-PORT) port))
-
 (defn compute-executor-capacity
   [^ExecutorSummary e]
   (let [stats (.get_stats e)
@@ -562,7 +558,7 @@
      "failed" (get-in stats [:failed window])
      "errorHost" error-host
      "errorPort" error-port
-     "errorWorkerLogLink" (worker-log-link error-host error-port)
+     "errorWorkerLogLink" (worker-log-link error-host error-port *STORM-CONF*)
      "lastError" (get-error-data last-error) }))
 
 (defn bolt-comp [top-id summ-map errors window include-sys?]
@@ -587,7 +583,7 @@
      "failed" (get-in stats [:failed window])
      "errorHost" error-host
      "errorPort" error-port
-     "errorWorkerLogLink" (worker-log-link error-host error-port)
+     "errorWorkerLogLink" (worker-log-link error-host error-port *STORM-CONF*)
      "lastError" (get-error-data last-error) }))
 
 (defn topology-summary [^TopologyInfo summ]
@@ -684,7 +680,7 @@
      "completeLatency" (float-str (:complete-latencies stats))
      "acked" (nil-to-zero (:acked stats))
      "failed" (nil-to-zero (:failed stats))
-     "workerLogLink" (worker-log-link (.get_host e) (.get_port e))}))
+     "workerLogLink" (worker-log-link (.get_host e) (.get_port e) *STORM-CONF*)}))
 
 (defn component-errors
   [errors-list topology-id]
@@ -696,7 +692,7 @@
        {"time" (* 1000 (long (.get_error_time_secs e)))
         "errorHost" (.get_host e)
         "errorPort"  (.get_port e)
-        "errorWorkerLogLink"  (worker-log-link (.get_host e) (.get_port e))
+        "errorWorkerLogLink"  (worker-log-link (.get_host e) (.get_port e) *STORM-CONF*)
         "error" (.get_error e)})}))
 
 (defn spout-stats
@@ -780,7 +776,7 @@
      "processLatency" (float-str (:process-latencies stats))
      "acked" (nil-to-zero (:acked stats))
      "failed" (nil-to-zero (:failed stats))
-     "workerLogLink" (worker-log-link (.get_host e) (.get_port e))}))
+     "workerLogLink" (worker-log-link (.get_host e) (.get_port e) *STORM-CONF*)}))
 
 (defn bolt-stats
   [window ^TopologyInfo topology-info component executors include-sys?]

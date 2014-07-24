@@ -647,11 +647,12 @@
                (.getTopologies topologies)))]
     topology-id->executor->component))
 
-(defn mk-executor->component-name+host+port [topology-id->executor->component assignment topology-id]
+(defn mk-executor->component-name+host+port [topology-id->executor->component assignment topology-id conf]
   (let [executor->component (get topology-id->executor->component topology-id)]
     {"components"
      (for [[executor [node port]] (:executor->node+port assignment)]
-       {"component" (get executor->component executor)
+       {"workerLogLink" (worker-log-link (get (:node->host assignment) node) port conf)
+        "component" (get executor->component executor)
         "host" (get (:node->host assignment) node)
         "port" port
         "executor" (pr-str executor)})}))
@@ -723,7 +724,7 @@
         (log-debug "Assignment for " topology-id " hasn't changed")
         (do
           (let [;executor-summaries (.get_executors (.getTopologyInfo nimbus topology-id))
-                executor->component+node+port (mk-executor->component-name+host+port topology-id->executor->component assignment topology-id)]
+                executor->component+node+port (mk-executor->component-name+host+port topology-id->executor->component assignment topology-id conf)]
             (log-debug "Setting new assignment for topology id " topology-id ": " (pr-str assignment))
             (ats/send-topology-timeline-data "storm"  topology-id (.toString (uuid)) "reassignment"
                                              executor->component+node+port))

@@ -123,10 +123,6 @@ $(\"table#%s\").each(function(i) { $(this).tablesorter({ sortList: %s, headers: 
        [(apply sort-table id args)])
      )))
 
-(defn url-format [fmt & args]
-  (String/format fmt 
-    (to-array (map #(url-encode (str %)) args))))
-
 (defn to-tasks [^ExecutorInfo e]
   (let [start (.get_task_start e)
         end (.get_task_end e)]
