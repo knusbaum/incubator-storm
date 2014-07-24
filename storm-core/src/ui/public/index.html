@@ -33,11 +33,12 @@
 <h2>Topology summary</h2>
 <div id="topology-summary">
 </div>
+<h2><a href="/history.html">Topology History</a></h2>
+<div id="history-server">
+<br/>
+</div>
 <h2>Supervisor summary</h2>
 <div id="supervisor-summary">
-</div>
-<h2>Topology History</h2>
-<div id="history-server">
 </div>
 <h2>Nimbus Configuration</h2>
 <div id="nimbus-configuration"></div>
@@ -60,19 +61,21 @@ $(document).ready(function() {
     var historyServer = $("#history-server");
     var config = $("#nimbus-configuration");
 
+
     $.getJSON("/api/v1/cluster/summary",function(response,status,jqXHR) {
         $.get("/templates/index-page-template.html", function(template) {
             clusterSummary.append(Mustache.render($(template).filter("#cluster-summary-template").html(),response));
         });
     });
     $.getJSON("/api/v1/topology/summary",function(response,status,jqXHR) {
-      $.get("/templates/index-page-template.html", function(template) {
-          topologySummary.append(Mustache.render($(template).filter("#topology-summary-template").html(),response));
-          if(response["topologies"].length > 0) {
-              $("#topology-summary-table").tablesorter({ sortList: [[0,0]], headers: {3: { sorter: "stormtimestr"}}});
-              }
-      });
+        $.get("/templates/index-page-template.html", function(template) {
+            topologySummary.append(Mustache.render($(template).filter("#topology-summary-template").html(),response));
+            if(response["topologies"].length > 0) {
+                $("#topology-summary-table").tablesorter({ widgets: ["zebra", "filter"], sortList: [[0,0]], headers: {3: { sorter: "stormtimestr"}}});
+            }
+        });
     });
+
     $.getJSON("/api/v1/supervisor/summary",function(response,status,jqXHR) {
       $.get("/templates/index-page-template.html", function(template) {
           supervisorSummary.append(Mustache.render($(template).filter("#supervisor-summary-template").html(),response));
@@ -88,14 +91,7 @@ $(document).ready(function() {
           $("#nimbus-configuration-table").tablesorter({ sortList: [[0,0]], headers: {}});
       });
     });
-    $.getJSON("/api/v1/timeline/topologies", function(response,status,jqXHR) {
-      $.get("/templates/index-page-template.html", function(template) {
-          historyServer.append(Mustache.render($(template).filter("#history-template").html(),response));
-          if(response["topology"].length > 0) {
-              $("#history-server-table").tablesorter({ sortList: [[0,0]], headers: {}});
-          }
-      });
-    });
+    
   });
 </script>
 </html>

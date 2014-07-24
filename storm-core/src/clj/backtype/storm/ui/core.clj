@@ -29,7 +29,7 @@
             ExecutorStats ExecutorSummary TopologyInfo SpoutStats BoltStats
             ErrorInfo ClusterSummary SupervisorSummary TopologySummary
             Nimbus$Client StormTopology GlobalStreamId RebalanceOptions
-            KillOptions])
+            KillOptions NotAliveException])
   (:import [java.io File])
   (:require [compojure.route :as route]
             [compojure.handler :as handler]
@@ -618,37 +618,41 @@
 
 (defn topology-page [id window include-sys?]
   (with-nimbus nimbus
-    (let [window (if window window ":all-time")
-          window-hint (window-hint window)
-          summ (.getTopologyInfo ^Nimbus$Client nimbus id)
-          topology (.getTopology ^Nimbus$Client nimbus id)
-          topology-conf (from-json (.getTopologyConf ^Nimbus$Client nimbus id))
-          spout-summs (filter (partial spout-summary? topology) (.get_executors summ))
-          bolt-summs (filter (partial bolt-summary? topology) (.get_executors summ))
-          spout-comp-summs (group-by-comp spout-summs)
-          bolt-comp-summs (group-by-comp bolt-summs)
-          bolt-comp-summs (filter-key (mk-include-sys-fn include-sys?) bolt-comp-summs)
-          name (.get_name summ)
-          status (.get_status summ)
-          msg-timeout (topology-conf TOPOLOGY-MESSAGE-TIMEOUT-SECS)
-          spouts (.get_spouts topology)
-          bolts (.get_bolts topology)
-          visualizer-data (visualization-data (merge (hashmap-to-persistent spouts)
-                                                     (hashmap-to-persistent bolts))
-                                              spout-comp-summs
-                                              bolt-comp-summs
-                                              window
-                                              id)]
-      (merge
-       (topology-summary summ)
-       {"window" window
-        "windowHint" window-hint
-        "msgTimeout" msg-timeout
-        "topologyStats" (topology-stats id window (total-aggregate-stats spout-summs bolt-summs include-sys?))
-        "spouts" (spout-comp id spout-comp-summs (.get_errors summ) window include-sys?)
-        "bolts" (bolt-comp id bolt-comp-summs (.get_errors summ) window include-sys?)
-        "configuration" topology-conf
-        "visualizationTable" (stream-boxes visualizer-data)}))))
+    (try
+      (let [window (if window window ":all-time")
+            window-hint (window-hint window)
+            summ (.getTopologyInfo ^Nimbus$Client nimbus id)
+            topology (.getTopology ^Nimbus$Client nimbus id)
+            topology-conf (from-json (.getTopologyConf ^Nimbus$Client nimbus id))
+            spout-summs (filter (partial spout-summary? topology) (.get_executors summ))
+            bolt-summs (filter (partial bolt-summary? topology) (.get_executors summ))
+            spout-comp-summs (group-by-comp spout-summs)
+            bolt-comp-summs (group-by-comp bolt-summs)
+            bolt-comp-summs (filter-key (mk-include-sys-fn include-sys?) bolt-comp-summs)
+            name (.get_name summ)
+            status (.get_status summ)
+            msg-timeout (topology-conf TOPOLOGY-MESSAGE-TIMEOUT-SECS)
+            spouts (.get_spouts topology)
+            bolts (.get_bolts topology)
+            visualizer-data (visualization-data (merge (hashmap-to-persistent spouts)
+                                                       (hashmap-to-persistent bolts))
+                                                spout-comp-summs
+                                                bolt-comp-summs
+                                                window
+                                                id)]
+        (merge
+         (topology-summary summ)
+         {"window" window
+          "windowHint" window-hint
+          "msgTimeout" msg-timeout
+          "topologyStats" (topology-stats id window (total-aggregate-stats spout-summs bolt-summs include-sys?))
+          "spouts" (spout-comp id spout-comp-summs (.get_errors summ) window include-sys?)
+          "bolts" (bolt-comp id bolt-comp-summs (.get_errors summ) window include-sys?)
+          "configuration" topology-conf
+          "visualizationTable" (stream-boxes visualizer-data)}))
+      (catch NotAliveException e
+        {"id" id
+         "status" "NOT-ALIVE"}))))
 
 (defn spout-output-stats
   [stream-summary window]

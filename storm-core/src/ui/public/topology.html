@@ -33,7 +33,6 @@
 </head>
 <body>
 <h1><a href="/">Storm UI</a></h1>
-<h2>Topology summary</h2>
 <div id="topology-summary">
 </div>
 <div id="topology-actions">
@@ -72,6 +71,7 @@ $(document).ready(function() {
     });
 
     $.getJSON(url,function(response,status,jqXHR) {
+
         var topologySummary = $("#topology-summary");
         var topologyStats = $("#topology-stats");
         var spoutStats = $("#spout-stats");
@@ -83,6 +83,16 @@ $(document).ready(function() {
         var buttonJsonData = topologyActionJson(response["id"],response["name"],response["status"],response["msgTimeout"]);
         $.get("/templates/topology-page-template.html", function(template) {
             topologySummary.append(Mustache.render($(template).filter("#topology-summary-template").html(),response));
+
+            if(response["status"] == "NOT-ALIVE")
+            {
+                setTimeout(function () {
+                    //alert("Moving.");
+                    location.pathname = "/timeline.html?id=" + topologyId;
+                }, 5000);
+                return;
+            }
+
             topologyActions.append(Mustache.render($(template).filter("#topology-actions-template").html(),buttonJsonData));
             topologyStats.append(Mustache.render($(template).filter("#topology-stats-template").html(),response));
             if(response["topologyStats"].length > 0) {

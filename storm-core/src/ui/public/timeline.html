@@ -56,16 +56,15 @@ $(document).ready(function() {
         })};
         $.get("/templates/timeline-page-template.html", function(template) {
             reassignmentTable.append(Mustache.render($(template).filter("#reassignment-template").html(),reassignments));
-            $("#reassignment-table").tablesorter({ sortList:[[0,0]], headers:{}});
 
+            $("#reassignment-table").tablesorter({ sortList:[[0,0]], headers:{}});
             $("#reassignment-table").bind("sortStart", remove_timestamp_headers);
+
             $(".show-timestamp-headers").click(restore_timestamp_headers);
-            
+
             $('.timestamp-header').nextUntil('tr.timestamp-header').hide();
-            $('.timestamp-header').click(function() {
-                $(this).nextUntil('tr.timestamp-header').toggle();
-            });
-            
+            $('.timestamp-header').addClass('timestamp-deselected');
+            $('.timestamp-header').click(header_fn);
         });
     });
 });
@@ -73,14 +72,25 @@ $(document).ready(function() {
 function remove_timestamp_headers () {
     $(".timestamp-header").unbind("click");
     $(".timestamp-header").removeClass("timestamp-header").addClass("timestamp-invisible");
+    $(".timestamp-deselected").hide();
 }
 
 function restore_timestamp_headers () {
     $(".timestamp-invisible").removeClass("timestamp-invisible").addClass("timestamp-header");
-    
-    $('.timestamp-header').click(function() {
-        $(this).nextUntil('tr.timestamp-header').toggle();
-    });
+    $('.timestamp-header').click(header_fn);
+    $(".timestamp-deselected").show();
 }
+
+function header_fn () {
+    $(this).nextUntil('tr.timestamp-header').toggle();
+    if($(this).hasClass('timestamp-deselected')) {
+        $(this).addClass('timestamp-selected').removeClass('timestamp-deselected');
+    }
+    else
+    {
+        $(this).addClass('timestamp-deselected').removeClass('timestamp-selected');
+    }
+}
+
 </script>
 </html>

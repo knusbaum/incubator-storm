@@ -8,7 +8,8 @@
   (:import [org.apache.hadoop.yarn.util Records])
   (:import [org.apache.hadoop.conf Configuration])
   (:import [org.apache.hadoop.net NetUtils])
-  (:use [backtype.storm util log])
+  (:use [backtype.storm util log]
+        [clojure.data])
   (:require [clj-http.client :as client]))
 
 (def TIMELINE-TOPOLOGY-DIRECTORY "topologies")
@@ -54,16 +55,32 @@
                            "entities")]
     (to-json 
      {"topology"
-      (flatten (for [entity topology-entities]
-                 (for [event (get entity "events")]
-                   {"topologyId" (get (get event "eventinfo") ":topology-id")})))})))
+      (distinct
+       (flatten (for [entity topology-entities]
+                  (for [event (get entity "events")]
+                    {"topologyId" (get (get event "eventinfo") ":topology-id")}))))})))
 
 (defn get-topology-data
   "Get all events associated with a topology."
   [topology-id]
   (let [topology-entities (get
                            (get-and-deserialize (str "http://localhost:8188/ws/v1/timeline/" topology-id))
-                           "entities")]
-    (to-json (flatten (for [entity topology-entities]
-                        (get entity "events"))))))
-       
+                           "entities")
+        reassignments (sort #(compare (get %1 "timestamp") (get %2 "timestamp"))
+                            (flatten (for [entity topology-entities]
+                                       (get entity "events"))))
+        get-components #(get (get % "eventinfo") "components")
+        diff-components (fn [previous new]
+                          (assoc new "eventinfo"
+                                 {"components"
+                                  (into []
+                                        (second
+                                         (diff previous
+                                               (into #{} (get-components new)))))}))]
+    (to-json (reduce (fn [acc elem]
+                       (if (empty? acc)
+                         [elem]
+                         (let [previous-assignment (into #{} (get-components (last acc)))]
+                           (conj acc
+                                 (diff-components previous-assignment elem)))))
+                     [] reassignments))))
