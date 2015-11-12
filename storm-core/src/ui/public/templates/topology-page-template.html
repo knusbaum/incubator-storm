@@ -212,7 +212,7 @@
       <tr>
         {{#:row}}
         <td>
-          <input type="checkbox" id={{:sani-stream}} class="stream-box" {{#:checked}}checked{{/:checked}}/>
+          <input type="checkbox" id={{:sani-stream}} onclick="show_visualization(null);" class="stream-box" {{#:checked}}checked{{/:checked}}/>
           {{:stream}}
         </td>
         {{/:row}}
@@ -220,7 +220,8 @@
       {{/visualizationTable}}
     </table>
   </p>
-  <canvas id="topoGraph" width=1024 height=768 style="border:1px solid #000000;">
+<!--  <canvas id="topoGraph" width=1024 height=768 style="border:1px solid #000000;" /> -->
+  <div id="jointjs_graph"></div>
 </script>
 
 <script id="topology-visualization-template" type="text/html">

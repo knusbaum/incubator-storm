@@ -19,6 +19,12 @@
 // Inspired by
 // https://github.com/samizdatco/arbor/blob/master/docs/sample-project/main.js
 
+
+function drawLine(ctx, pt1, pt2, weight) {
+
+}
+
+
 function renderGraph(elem) {
 
     var canvas = $(elem).get(0);
@@ -320,50 +326,60 @@ function gather_stream_count(stats, stream, time) {
 }
 
 
-function rechoose(jdat, sys, box) {
+function choose(jdat, graph, box) {
     var id = box.id;
+    console.log("Checking: " + id + " is " + $(box).is(':checked'));
+    
     if($(box).is(':checked'))
     {
         //Check each node in our json data to see if it has inputs from or outputs to selected streams. If it does, add a node for it.
         $.each(jdat,function(k,v) {
-            if( has_checked_stream_input(v[":inputs"]) || has_checked_stream_output(jdat, k))
-                sys.addNode(k,v);
+            if( has_checked_stream_input(v[":inputs"]) || has_checked_stream_output(jdat, k)) {
+                console.log("Adding node: " + k);
+                //console.log("Inputs: " + JSON.stringify(v[":inputs"]));
+                //console.log("Has Output: " + has_checked_stream_output(jdat, k));
+                graph.setNode(k, { label: k, width: 100, height:50});
+            }
+            else {
+                console.log("Not adding node: " + k);
+            }
+            
         });
            
         //Check each node in our json data and add necessary edges based on selected components.
         $.each(jdat, function(k, v) {
             for(var i = 0; i < v[":inputs"].length; i++)
                 if(v[":inputs"][i][":sani-stream"] === id) {
-                    
-                    sys.addEdge(v[":inputs"][i][":component"], k, v);
+                    console.log("Adding edge: " + v[":inputs"][i][":component"] + " -> " + k);
+                    graph.setEdge(v[":inputs"][i][":component"], k);
                 }
         });
     }
-    else {
-        //Check each node to see if it should be pruned.
-        sys.prune(function(node, from, to) {
-            return !has_checked_stream_input(node.data[":inputs"]) && !has_checked_stream_output(jdat, node.name);
-        });
-        
-        //Check each edge to see if it represents any selected streams. If not, prune it.
-        sys.eachEdge(function(edge, pt1, pt2) {
-            var inputs = edge.target.data[":inputs"];
-            
-            if($.grep(inputs, function(input) {
-                
-                return input[":component"] === edge.source.name 
-                    && stream_checked(input[":sani-stream"]);
-            
-            }).length == 0)
-            {
-                sys.pruneEdge(edge);
-            }
-        });
-    }
+//    else {
+//        //Check each node to see if it should be pruned.
+//        sys.prune(function(node, from, to) {
+//            return !has_checked_stream_input(node.data[":inputs"]) && !has_checked_stream_output(jdat, node.name);
+//        });
+//        
+//        //Check each edge to see if it represents any selected streams. If not, prune it.
+//        sys.eachEdge(function(edge, pt1, pt2) {
+//            var inputs = edge.target.data[":inputs"];
+//            
+//            if($.grep(inputs, function(input) {
+//                
+//                return input[":component"] === edge.source.name 
+//                    && stream_checked(input[":sani-stream"]);
+//            
+//            }).length == 0)
+//            {
+//                sys.pruneEdge(edge);
+//            }
+//        });
+//    }
 
     //Tell the particle system's renderer that it needs to update its labels, colors, widths, etc.
-    sys.renderer.signal_update();
-    sys.renderer.redraw();
+//    sys.renderer.signal_update();
+//    sys.renderer.redraw();
 
 }
 
@@ -385,61 +401,132 @@ function jsError(other) {
   }
 }
 
-var should_update;
-function show_visualization(sys) {
-    $.getJSON("/api/v1/topology/"+$.url("?id")+"/visualization-init",function(response,status,jqXHR) {
-        $.get("/templates/topology-page-template.html", function(template) {
-            jsError(function() {
-                var topologyVisualization = $("#visualization-container");
-                topologyVisualization.append(
-                    Mustache.render($(template)
-                        .filter("#topology-visualization-container-template")
-                        .html(),
-                        response));
-                });
-
-            if(sys == null)
-            {
-                sys = arbor.ParticleSystem(20, 1000, 0.15, true, 55, 0.02, 0.6);
-                sys.renderer = renderGraph("#topoGraph");
-                sys.stop();
-
-                $(".stream-box").click(function () { rechoose(topology_data, sys, this) });
-            }
-
-            should_update = true;
-            var update_freq_ms = 10000;
-            var update = function(should_rechoose){
-              if(should_update) {
-                $.ajax({
-                    url: "/api/v1/topology/"+$.url("?id")+"/visualization",
-                    success: function(data, status, jqXHR) {
-                        topology_data = data;
-                        update_data(topology_data, sys);
-                        sys.renderer.signal_update();
-                        sys.renderer.redraw();
-                        if(should_update)
-                            setTimeout(update, update_freq_ms);
-                        if(should_rechoose)
-                            $(".stream-box").each(function () {
-                                rechoose(topology_data, sys, this)
-                            });
-                    }
-                });
-              }
-            };
-
-            update(true);
-            $("#visualization-container").show(500);
-            $("#show-hide-visualization").attr('value', 'Hide Visualization');
-            $("#show-hide-visualization").unbind("click");
-            $("#show-hide-visualization").click(function () { hide_visualization(sys) });
-        })
+function newNode(graph, name) {
+    gnode = graph.node(name);
+    node = new joint.shapes.basic.Rect({
+        position: { x: gnode.x, y: gnode.y},
+        size: { width: gnode.width, height: gnode.height},
+        attrs: { rect: { fill: 'blue' },
+                 text: { text: name,
+                         fill: 'white'}}
     });
+
+    return node;
 }
 
+var did_it = false;
+function do_once() {
+    if(! did_it) {
+        did_it = true;
+        $.ajax("/api/v1/topology/"+$.url("?id")+"/visualization-init",
+               { async: false,
+                 dataType: "jsonp",
+                 success: function(response,status,jqXHR) {
+                     $.ajax("/templates/topology-page-template.html",
+                            { async: false,
+                              success: function(template) {
+                                  jsError(function() {
+                                      var topologyVisualization = $("#visualization-container");
+                                      topologyVisualization.html(
+                                          Mustache.render($(template)
+                                                          .filter("#topology-visualization-container-template")
+                                                          .html(),
+                                                          response));
+                                  });
+                              }
+                            });
+                 }
+               });
+    }
+}
+
+function show_visualization(sys) {
+    do_once();
+    
+    $.ajax({
+        url: "/api/v1/topology/"+$.url("?id")+"/visualization",
+        success: function(data, status, jqXHR) {
+            var graph = new dagre.graphlib.Graph();
+            graph.setGraph({});
+            graph.setDefaultEdgeLabel(function() { return {}; });
+            graph.marginx = 10;
+            graph.marginy = 10;
+            
+            topology_data = data;
+            console.log("Trying stream boxes.");
+            $(".stream-box").each(function () {
+                choose(topology_data, graph, this)
+            });
+            
+            dagre.layout(graph);
+            console.log("Nodes: " + graph.nodes());
+            graph.nodes().forEach(function(v) {
+                console.log("Node " + v + ": " + JSON.stringify(graph.node(v)));
+            });
+            graph.edges().forEach(function(e) {
+                console.log("Edge " + e.v + " -> " + e.w + ": " + JSON.stringify(graph.edge(e)));
+            });
+
+            $('#jointjs_graph').html("");
+            
+            var chart = new joint.dia.Graph;
+            
+            var paper = new joint.dia.Paper({
+                el: $('#jointjs_graph'),
+                width:1024,
+                height:768,
+                model: chart,
+                gridSize: 1,
+            });
+            
+            var chartNodes = {};
+            
+            graph.edges().forEach(function(e) {
+                console.log("Edge " + e.v + " -> " + e.w + ": " + JSON.stringify(graph.edge(e)));
+                
+                var n1 = chartNodes[e.v];
+                if(n1 == null) {
+                    chartNodes[e.v] = newNode(graph, e.v);
+                    n1 = chartNodes[e.v];
+                    chart.addCells([n1]);
+                }
+                
+                var n2 = chartNodes[e.w];
+                if(n2 == null) {
+                    chartNodes[e.w] = newNode(graph, e.w);
+                    n2 = chartNodes[e.w];
+                    chart.addCells([n2]);
+                }
+                
+                var link = new joint.dia.Link({
+                    source: { id: n1.id},
+                    target: { id: n2.id}
+                });
+                
+                link.attr({
+//                    '.connection': { stroke: 'blue' },
+                    '.marker-target': { d: 'M 10 0 L 0 5 L 10 10 z' }
+                });
+                
+                console.log("Points: " + JSON.stringify(graph.edge(e).points));
+                link.set('vertices', graph.edge(e).points);
+                
+                chart.addCells([link]);
+            });
+            
+            
+        }
+    });
+    
+    
+    //            update(true);
+    $("#visualization-container").show(500);
+    $("#show-hide-visualization").attr('value', 'Hide Visualization');
+    $("#show-hide-visualization").unbind("click");
+    $("#show-hide-visualization").click(function () { hide_visualization(sys) });
+}
+    
 function hide_visualization(sys) {
-    should_update = false;
     $("#visualization-container").hide(500);
     $("#show-hide-visualization").attr('value', 'Show Visualization');
     $("#show-hide-visualization").unbind("click");
