@@ -44,6 +44,7 @@
   (:import [org.apache.storm.utils VersionInfo])
   (:import [org.apache.storm Config])
   (:import [java.io File])
+  (:import [java.net URLEncoder URLDecoder])
   (:require [compojure.route :as route]
             [compojure.handler :as handler]
             [ring.util.response :as resp]
@@ -183,10 +184,10 @@
 
 (defn worker-dump-link [host port topology-id]
   (url-format "http://%s:%s/dumps/%s/%s"
-              (url-encode host)
+              (URLEncoder/encode host)
               (*STORM-CONF* LOGVIEWER-PORT)
-              (url-encode topology-id)
-              (str (url-encode host) ":" (url-encode port))))
+              (URLEncoder/encode topology-id)
+              (str (URLEncoder/encode host) ":" (URLEncoder/encode port))))
 
 (defn stats-times
   [stats-map]
@@ -445,7 +446,7 @@
     (for [^TopologySummary t summs]
       {
        "id" (.get_id t)
-       "encodedId" (url-encode (.get_id t))
+       "encodedId" (URLEncoder/encode (.get_id t))
        "owner" (.get_owner t)
        "name" (.get_name t)
        "status" (.get_status t)
@@ -537,7 +538,7 @@
       (common-agg-stats-json cs)
       (get-error-json topo-id (.get_last_error s) secure?)
       {"spoutId" id
-       "encodedSpoutId" (url-encode id)
+       "encodedSpoutId" (URLEncoder/encode id)
        "completeLatency" (float-str (.get_complete_latency_ms ss))})))
 
 (defmethod comp-agg-stats-json ComponentType/BOLT
@@ -548,7 +549,7 @@
       (common-agg-stats-json cs)
       (get-error-json topo-id (.get_last_error s) secure?)
       {"boltId" id
-       "encodedBoltId" (url-encode id)
+       "encodedBoltId" (URLEncoder/encode id)
        "capacity" (float-str (.get_capacity ss))
        "executeLatency" (float-str (.get_execute_latency_ms ss))
        "executed" (.get_executed ss)
@@ -572,7 +573,7 @@
                          (.get_samplingpct debug-opts)])
         uptime (.get_uptime_secs topo-info)]
     {"id" id
-     "encodedId" (url-encode id)
+     "encodedId" (URLEncoder/encode id)
      "owner" (.get_owner topo-info)
      "name" (.get_name topo-info)
      "status" (.get_status topo-info)
@@ -687,7 +688,7 @@
         ^CommonAggregateStats cas (.get_common_stats stats)
         comp-id (.get_componentId s)]
     {"component" comp-id
-     "encodedComponentId" (url-encode comp-id)
+     "encodedComponentId" (URLEncoder/encode comp-id)
      "stream" (.get_streamId s)
      "executeLatency" (float-str (.get_execute_latency_ms bas))
      "processLatency" (float-str (.get_process_latency_ms bas))
@@ -733,7 +734,7 @@
         exec-id (pretty-executor-info info)
         uptime (.get_uptime_secs summ)]
     {"id" exec-id
-     "encodedId" (url-encode exec-id)
+     "encodedId" (URLEncoder/encode exec-id)
      "uptime" (pretty-uptime-sec uptime)
      "uptimeSeconds" uptime
      "host" host
@@ -761,7 +762,7 @@
         exec-id (pretty-executor-info info)
         uptime (.get_uptime_secs summ)]
     {"id" exec-id
-     "encodedId" (url-encode exec-id)
+     "encodedId" (URLEncoder/encode exec-id)
      "uptime" (pretty-uptime-sec uptime)
      "uptimeSeconds" uptime
      "host" host
@@ -838,13 +839,13 @@
                                    secure?)
        "user" user
        "id" component
-       "encodedId" (url-encode component)
+       "encodedId" (URLEncoder/encode component)
        "name" (.get_topology_name comp-page-info)
        "executors" (.get_num_executors comp-page-info)
        "tasks" (.get_num_tasks comp-page-info)
        "topologyId" topology-id
        "topologyStatus" (.get_topology_status comp-page-info)
-       "encodedTopologyId" (url-encode topology-id)
+       "encodedTopologyId" (URLEncoder/encode topology-id)
        "window" window
        "componentType" (-> comp-page-info .get_component_type str lower-case)
        "windowHint" window-hint
@@ -956,7 +957,7 @@
     (assert-authorized-user "getClusterInfo")
     (json-response (all-topologies-summary) (:callback m)))
   (GET  "/api/v1/topology-workers/:id" [:as {:keys [cookies servlet-request]} id & m]
-    (let [id (url-decode id)]
+    (let [id (URLDecoder/decode id)]
       (json-response {"hostPortList" (worker-host-port id)
                       "logviewerPort" (*STORM-CONF* LOGVIEWER-PORT)} (:callback m))))
   (GET "/api/v1/topology/:id" [:as {:keys [cookies servlet-request scheme]} id & m]

@@ -114,7 +114,7 @@
 
                     (conf STORM-SCHEDULER)
                     (do (log-message "Using custom scheduler: " (conf STORM-SCHEDULER))
-                        (-> (conf STORM-SCHEDULER) new-instance))
+                        (-> (conf STORM-SCHEDULER) (#(Utils/newInstance %))))
 
                     :else
                     (do (log-message "Using default scheduler")
@@ -157,7 +157,7 @@
 
 (defn create-tology-action-notifier [conf]
   (when-not (clojure.string/blank? (conf NIMBUS-TOPOLOGY-ACTION-NOTIFIER-PLUGIN))
-    (let [instance (new-instance (conf NIMBUS-TOPOLOGY-ACTION-NOTIFIER-PLUGIN))]
+    (let [instance (Utils/newInstance (conf NIMBUS-TOPOLOGY-ACTION-NOTIFIER-PLUGIN))]
       (try
         (.prepare instance conf)
         instance
@@ -188,7 +188,7 @@
      :blob-uploaders (mk-blob-cache-map conf)
      :blob-listers (mk-bloblist-cache-map conf)
      :uptime (uptime-computer)
-     :validator (new-instance (conf NIMBUS-TOPOLOGY-VALIDATOR))
+     :validator (Utils/newInstance (conf NIMBUS-TOPOLOGY-VALIDATOR))
      :timer (mk-timer :kill-fn (fn [t]
                                  (log-error t "Error when processing event")
                                  (exit-process! 20 "Error when processing an event")
@@ -643,8 +643,11 @@
     (->> (storm-task-info topology storm-conf)
          reverse-map
          (map-val sort)
-         (join-maps component->executors)
-         (map-val (partial apply partition-fixed))
+         ((fn [ & maps ] (Utils/joinMaps (into-array (into [component->executors] maps)))))
+         (clojurify-structure)
+         (map-val (partial apply (fn part-fixed [a b] (Utils/partitionFixed a b))))
+;         (map-val (partial apply partition-fixed))
+         ((fn [whatever] (log-message (pr-str "after-partition-fixed: " whatever)) whatever))
          (mapcat second)
          (map to-executor-id)
          )))
@@ -653,6 +656,7 @@
   (let [conf (:conf nimbus)
         blob-store (:blob-store nimbus)
         executors (compute-executors nimbus storm-id)
+        _ (log-message "EXECUTORS: " (pr-str executors))
         topology (read-storm-topology-as-nimbus storm-id blob-store)
         storm-conf (read-storm-conf-as-nimbus storm-id blob-store)
         task->component (storm-task-info topology storm-conf)

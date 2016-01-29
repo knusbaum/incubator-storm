@@ -1341,21 +1341,21 @@
                      NIMBUS-THRIFT-PORT 6666})
           expected-acls nimbus/NIMBUS-ZK-ACLS
           fake-inimbus (reify INimbus (getForcedScheduler [this] nil))]
-      (stubbing [nimbus-topo-history-state nil
-                 mk-authorization-handler nil
-                 cluster/mk-storm-cluster-state nil
-                 nimbus/file-cache-map nil
-                 nimbus/mk-blob-cache-map nil
-                 nimbus/mk-bloblist-cache-map nil
-                 uptime-computer nil
-                 new-instance nil
-                 mk-timer nil
-                 zk-leader-elector nil
-                 nimbus/mk-scheduler nil]
-        (nimbus/nimbus-data auth-conf fake-inimbus)
-        (verify-call-times-for cluster/mk-storm-cluster-state 1)
-        (verify-first-call-args-for-indices cluster/mk-storm-cluster-state [2]
-                                            expected-acls)))))
+      (with-open [_ (proxy [MockedUtils] [] (newInstanceImpl [_]))]
+        (stubbing [nimbus-topo-history-state nil
+                   mk-authorization-handler nil
+                   cluster/mk-storm-cluster-state nil
+                   nimbus/file-cache-map nil
+                   nimbus/mk-blob-cache-map nil
+                   nimbus/mk-bloblist-cache-map nil
+                   uptime-computer nil
+                   mk-timer nil
+                   zk-leader-elector nil
+                   nimbus/mk-scheduler nil]
+                  (nimbus/nimbus-data auth-conf fake-inimbus)
+                  (verify-call-times-for cluster/mk-storm-cluster-state 1)
+                  (verify-first-call-args-for-indices cluster/mk-storm-cluster-state [2]
+                                                      expected-acls))))))
 
 (deftest test-file-bogus-download
   (with-local-cluster [cluster :daemon-conf {SUPERVISOR-ENABLE false TOPOLOGY-ACKER-EXECUTORS 0 TOPOLOGY-EVENTLOGGER-EXECUTORS 0}]

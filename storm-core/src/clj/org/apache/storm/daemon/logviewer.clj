@@ -28,7 +28,8 @@
   (:import [org.apache.logging.log4j.core Appender LoggerContext])
   (:import [org.apache.logging.log4j.core.appender RollingFileAppender])
   (:import [java.io BufferedInputStream File FileFilter FileInputStream
-            InputStream InputStreamReader])
+            InputStream InputStreamReader]
+           [java.net URLDecoder])
   (:import [java.nio.file Files Path Paths DirectoryStream])
   (:import [java.nio ByteBuffer])
   (:import [org.apache.storm.utils Utils])
@@ -982,7 +983,7 @@
             user (.getUserName http-creds-handler servlet-request)
             start (if (:start m) (parse-long-from-map m :start))
             length (if (:length m) (parse-long-from-map m :length))
-            file (url-decode (:file m))]
+            file (URLDecoder/decode (:file m))]
         (log-template (log-page file start length (:grep m) user log-root)
           file user))
       (catch InvalidRequestException ex
@@ -1050,7 +1051,7 @@
             user (.getUserName http-creds-handler servlet-request)
             start (if (:start m) (parse-long-from-map m :start))
             length (if (:length m) (parse-long-from-map m :length))
-            file (url-decode (:file m))]
+            file (URLDecoder/decode (:file m))]
         (log-template (daemonlog-page file start length (:grep m) user daemonlog-root)
           file user))
       (catch InvalidRequestException ex
@@ -1078,7 +1079,7 @@
     ;; filter is configured.
     (try
       (let [user (.getUserName http-creds-handler servlet-request)]
-        (search-log-file (url-decode file)
+        (search-log-file (URLDecoder/decode file)
           user
           (if (= (:is-daemon m) "yes") daemonlog-root log-root)
           (:search-string m)

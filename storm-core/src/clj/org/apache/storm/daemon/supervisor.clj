@@ -21,7 +21,7 @@
            [org.apache.storm Constants]
            [org.apache.storm.cluster ClusterStateContext DaemonType]
            [java.net JarURLConnection]
-           [java.net URI]
+           [java.net URI URLDecoder]
            [org.apache.commons.io FileUtils])
   (:use [org.apache.storm config util log timer local-state])
   (:import [org.apache.storm.generated AuthorizationException KeyNotFoundException WorkerResources])
@@ -118,7 +118,7 @@
   (map-val :master-code-dir assignments-snapshot))
 
 (defn- read-downloaded-storm-ids [conf]
-  (map #(url-decode %) (read-dir-contents (supervisor-stormdist-root conf)))
+  (map #(URLDecoder/decode %) (read-dir-contents (supervisor-stormdist-root conf)))
   )
 
 (defn read-worker-heartbeat [conf id]
@@ -1143,7 +1143,7 @@
 (defn resources-jar []
   (->> (.split (current-classpath) File/pathSeparator)
        (filter #(.endsWith  % ".jar"))
-       (filter #(zip-contains-dir? % RESOURCES-SUBDIR))
+       (filter #(Utils/zipDoesContainDir % RESOURCES-SUBDIR))
        first ))
 
 (defmethod download-storm-code

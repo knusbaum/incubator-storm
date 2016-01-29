@@ -256,63 +256,64 @@
         mq-context  (if mq-context
                       mq-context
                       (TransportFactory/makeContext storm-conf))]
-
+    
     (recursive-map
-      :conf conf
-      :mq-context mq-context
-      :receiver (.bind ^IContext mq-context storm-id port)
-      :storm-id storm-id
-      :assignment-id assignment-id
-      :port port
-      :worker-id worker-id
-      :cluster-state cluster-state
-      :storm-cluster-state storm-cluster-state
-      ;; when worker bootup, worker will start to setup initial connections to
-      ;; other workers. When all connection is ready, we will enable this flag
-      ;; and spout and bolt will be activated.
-      :worker-active-flag (atom false)
-      :storm-active-atom (atom false)
-      :storm-component->debug-atom (atom {})
-      :executors executors
-      :task-ids (->> receive-queue-map keys (map int) sort)
-      :storm-conf storm-conf
-      :topology topology
-      :system-topology (system-topology! storm-conf topology)
-      :heartbeat-timer (mk-halting-timer "heartbeat-timer")
-      :refresh-load-timer (mk-halting-timer "refresh-load-timer")
-      :refresh-connections-timer (mk-halting-timer "refresh-connections-timer")
-      :refresh-credentials-timer (mk-halting-timer "refresh-credentials-timer")
-      :reset-log-levels-timer (mk-halting-timer "reset-log-levels-timer")
-      :refresh-active-timer (mk-halting-timer "refresh-active-timer")
-      :executor-heartbeat-timer (mk-halting-timer "executor-heartbeat-timer")
-      :user-timer (mk-halting-timer "user-timer")
-      :task->component (HashMap. (storm-task-info topology storm-conf)) ; for optimized access when used in tasks later on
-      :component->stream->fields (component->stream->fields (:system-topology <>))
-      :component->sorted-tasks (->> (:task->component <>) reverse-map (map-val sort))
-      :endpoint-socket-lock (mk-rw-lock)
-      :cached-node+port->socket (atom {})
-      :cached-task->node+port (atom {})
-      :transfer-queue transfer-queue
-      :executor-receive-queue-map executor-receive-queue-map
-      :short-executor-receive-queue-map (map-key first executor-receive-queue-map)
-      :task->short-executor (->> executors
-                                 (mapcat (fn [e] (for [t (executor-id->tasks e)] [t (first e)])))
-                                 (into {})
-                                 (HashMap.))
-      :suicide-fn (mk-suicide-fn conf)
-      :uptime (uptime-computer)
-      :default-shared-resources (mk-default-resources <>)
-      :user-shared-resources (mk-user-resources <>)
-      :transfer-local-fn (mk-transfer-local-fn <>)
-      :transfer-fn (mk-transfer-fn <>)
-      :load-mapping (LoadMapping.)
-      :assignment-versions assignment-versions
-      :backpressure (atom false) ;; whether this worker is going slow
-      :transfer-backpressure (atom false) ;; if the transfer queue is backed-up
-      :backpressure-trigger (atom false) ;; a trigger for synchronization with executors
-      :throttle-on (atom false) ;; whether throttle is activated for spouts
-      )))
-
+     :conf conf
+     :mq-context mq-context
+     :receiver (.bind ^IContext mq-context storm-id port)
+     :storm-id storm-id
+     :assignment-id assignment-id
+     :port port
+     :worker-id worker-id
+     :cluster-state cluster-state
+     :storm-cluster-state storm-cluster-state
+     ;; when worker bootup, worker will start to setup initial connections to
+     ;; other workers. When all connection is ready, we will enable this flag
+     ;; and spout and bolt will be activated.
+     :worker-active-flag (atom false)
+     :storm-active-atom (atom false)
+     :storm-component->debug-atom (atom {})
+     :executors executors
+     :task-ids (->> receive-queue-map keys (map int) sort)
+     :storm-conf storm-conf
+     :topology topology
+     :system-topology (system-topology! storm-conf topology)
+     :heartbeat-timer (mk-halting-timer "heartbeat-timer")
+     :refresh-load-timer (mk-halting-timer "refresh-load-timer")
+     :refresh-connections-timer (mk-halting-timer "refresh-connections-timer")
+     :refresh-credentials-timer (mk-halting-timer "refresh-credentials-timer")
+     :reset-log-levels-timer (mk-halting-timer "reset-log-levels-timer")
+     :refresh-active-timer (mk-halting-timer "refresh-active-timer")
+     :executor-heartbeat-timer (mk-halting-timer "executor-heartbeat-timer")
+     :user-timer (mk-halting-timer "user-timer")
+     :task->component (HashMap. (storm-task-info topology storm-conf)) ; for optimized access when used in tasks later on
+     :component->stream->fields (component->stream->fields (:system-topology <>))
+     :component->sorted-tasks (->> (:task->component <>) reverse-map (map-val sort))
+     :endpoint-socket-lock (mk-rw-lock)
+     :cached-node+port->socket (atom {})
+     :cached-task->node+port (atom {})
+     :transfer-queue transfer-queue
+     :executor-receive-queue-map executor-receive-queue-map
+     :short-executor-receive-queue-map (map-key first executor-receive-queue-map)
+     :task->short-executor (->> executors
+                                (mapcat (fn [e] (for [t (executor-id->tasks e)] [t (first e)])))
+                                (into {})
+                                (HashMap.))
+     :suicide-fn (mk-suicide-fn conf)
+     :uptime (uptime-computer)
+     :default-shared-resources (mk-default-resources <>)
+     :user-shared-resources (mk-user-resources <>)
+     :transfer-local-fn (mk-transfer-local-fn <>)
+     :transfer-fn (mk-transfer-fn <>)
+     :load-mapping (LoadMapping.)
+     :assignment-versions assignment-versions
+     :backpressure (atom false) ;; whether this worker is going slow
+     :transfer-backpressure (atom false) ;; if the transfer queue is backed-up
+     :backpressure-trigger (atom false) ;; a trigger for synchronization with executors
+     :throttle-on (atom false) ;; whether throttle is activated for spouts
+     )))
+                
+    
 (defn- endpoint->string [[node port]]
   (str port "/" node))
 

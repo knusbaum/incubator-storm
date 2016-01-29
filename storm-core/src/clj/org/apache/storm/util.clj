@@ -890,130 +890,47 @@
   (log-message prefix ": " val)
   val)
 
-(defn zip-contains-dir?
-  [zipfile target]
-  (let [entries (->> zipfile (ZipFile.) .entries enumeration-seq (map (memfn getName)))]
-    (boolean (some #(.startsWith % (str target "/")) entries))))
-
-(defn url-encode
-  [s]
-  (codec/url-encode s))
-
-(defn url-decode
-  [s]
-  (codec/url-decode s))
-
-(defn join-maps
-  [& maps]
-  (let [all-keys (apply set/union (for [m maps] (-> m keys set)))]
-    (into {} (for [k all-keys]
-               [k (for [m maps] (m k))]))))
-
-(defn partition-fixed
-  [max-num-chunks aseq]
-  (if (zero? max-num-chunks)
-    []
-    (let [chunks (->> (integer-divided (count aseq) max-num-chunks)
-                      (#(dissoc % 0))
-                      (sort-by (comp - first))
-                      (mapcat (fn [[size amt]] (repeat amt size)))
-                      )]
-      (loop [result []
-             [chunk & rest-chunks] chunks
-             data aseq]
-        (if (nil? chunk)
-          result
-          (let [[c rest-data] (split-at chunk data)]
-            (recur (conj result c)
-                   rest-chunks
-                   rest-data)))))))
-
-
-(defn assoc-apply-self
-  [curr key afn]
+;; The following two will go away when worker, task, executor go away.
+(defn assoc-apply-self [curr key afn]
   (assoc curr key (afn curr)))
 
 (defmacro recursive-map
   [& forms]
-  (->> (partition 2 forms)
-       (map (fn [[key form]] `(assoc-apply-self ~key (fn [~'<>] ~form))))
-       (concat `(-> {}))))
+    (->> (partition 2 forms)
+         (map (fn [[key form]] `(assoc-apply-self ~key (fn [~'<>] ~form))))
+         (concat `(-> {}))))
 
-(defn current-stack-trace
-  []
-  (->> (Thread/currentThread)
-       .getStackTrace
-       (map str)
-       (str/join "\n")))
-
-(defn get-iterator
-  [^Iterable alist]
-  (if alist (.iterator alist)))
-
-(defn iter-has-next?
-  [^Iterator iter]
-  (if iter (.hasNext iter) false))
-
-(defn iter-next
-  [^Iterator iter]
-  (.next iter))
-
+; These four following will go away later. To be replaced by native java loops.
 (defmacro fast-list-iter
   [pairs & body]
   (let [pairs (partition 2 pairs)
         lists (map second pairs)
         elems (map first pairs)
         iters (map (fn [_] (gensym)) lists)
-        bindings (->> (map (fn [i l] [i `(get-iterator ~l)]) iters lists)
+        bindings (->> (map (fn [i l] [i `(if ~l (.iterator ~l))]) iters lists)
                       (apply concat))
-        tests (map (fn [i] `(iter-has-next? ~i)) iters)
-        assignments (->> (map (fn [e i] [e `(iter-next ~i)]) elems iters)
+        tests (map (fn [i] `(and ~i (.hasNext ^Iterator ~i))) iters)
+        assignments (->> (map (fn [e i] [e `(.next ^Iterator ~i)]) elems iters)
                          (apply concat))]
     `(let [~@bindings]
        (while (and ~@tests)
          (let [~@assignments]
            ~@body)))))
 
-(defn fast-list-map
-  [afn alist]
-  (let [ret (ArrayList.)]
-    (fast-list-iter [e alist]
-                    (.add ret (afn e)))
-    ret))
-
 (defmacro fast-list-for
   [[e alist] & body]
-  `(fast-list-map (fn [~e] ~@body) ~alist))
-
-(defn map-iter
-  [^Map amap]
-  (if amap (-> amap .entrySet .iterator)))
-
-(defn convert-entry
-  [^Map$Entry entry]
-  [(.getKey entry) (.getValue entry)])
+  `(let [ret# (ArrayList.)]
+     (fast-list-iter [~e ~alist]
+                     (.add ret# (do ~@body)))
+     ret#))
 
 (defmacro fast-map-iter
   [[bind amap] & body]
-  `(let [iter# (map-iter ~amap)]
-     (while (iter-has-next? iter#)
-       (let [entry# (iter-next iter#)
-             ~bind (convert-entry entry#)]
+  `(let [iter# (if ~amap (.. ^Map ~amap entrySet iterator))]
+     (while (and iter# (.hasNext ^Iterator iter#))
+       (let [entry# (.next ^Iterator iter#)
+             ~bind [(.getKey ^Map$Entry entry#) (.getValue ^Map$Entry entry#)]]
          ~@body))))
-
-(defn fast-first
-  [^List alist]
-  (.get alist 0))
-
-(defmacro get-with-default
-  [amap key default-val]
-  `(let [curr# (.get ~amap ~key)]
-     (if curr#
-       curr#
-       (do
-         (let [new# ~default-val]
-           (.put ~amap ~key new#)
-           new#)))))
 
 (defn fast-group-by
   [afn alist]
@@ -1021,18 +938,18 @@
     (fast-list-iter
       [e alist]
       (let [key (afn e)
-            ^List curr (get-with-default ret key (ArrayList.))]
+            ^List curr (let [curr (.get ret key)]
+                         (if curr
+                           curr
+                           (let [default (ArrayList.)]
+                             (.put ret key default)
+                             default)))]
         (.add curr e)))
     ret))
 
-(defn new-instance
-  [klass]
-  (let [klass (if (string? klass) (Class/forName klass) klass)]
-    (.newInstance klass)))
-
 (defn get-configured-class
   [conf config-key]
-  (if (.get conf config-key) (new-instance (.get conf config-key)) nil))
+  (if (.get conf config-key) (Utils/newInstance (.get conf config-key)) nil))
 
 (defmacro -<>
   ([x] x)

@@ -104,6 +104,31 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public class Utils {
+    // A singleton instance allows us to mock delegated static methods in our
+    // tests by subclassing.
+    private static final Utils INSTANCE = new Utils();
+    private static Utils _instance = INSTANCE;
+    
+    /**
+     * Provide an instance of this class for delegates to use.  To mock out
+     * delegated methods, provide an instance of a subclass that overrides the
+     * implementation of the delegated method.
+     * @param u a Utils instance
+     */
+    public static void setInstance(Utils u) {
+        _instance = u;
+    }
+    
+    /**
+     * Resets the singleton instance to the default. This is helpful to reset
+     * the class to its original functionality when mocking is no longer
+     * desired.
+     */
+    public static void resetInstance() {
+        _instance = INSTANCE;
+    }
+
+
     private static final Logger LOG = LoggerFactory.getLogger(Utils.class);
     public static final String DEFAULT_STREAM_ID = "default";
     public static final String DEFAULT_BLOB_VERSION_SUFFIX = ".version";
@@ -122,8 +147,19 @@ public class Utils {
 
     public static Object newInstance(String klass) {
         try {
-            Class c = Class.forName(klass);
-            return c.newInstance();
+            return newInstance(Class.forName(klass));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Object newInstance(Class klass) {
+        return _instance.newInstance(klass);
+    }
+
+    public Object newInstanceImpl(Class klass) {
+        try {
+            return klass.newInstance();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -1382,5 +1418,127 @@ public class Utils {
     public static int toPositive(int number) {
         return number & Integer.MAX_VALUE;
     }
+
+    /**
+     * Determines if a zip archive contains a particular directory.
+     *
+     * @param zipfile path to the zipped file
+     * @param target directory being looked for in the zip.
+     * @return boolean whether or not the directory exists in the zip.
+     */
+    public static boolean zipDoesContainDir(String zipfile, String target) throws IOException {
+        List<ZipEntry> entries = (List<ZipEntry>)Collections.list(new ZipFile(zipfile).entries());
+
+        if(entries == null) {
+            return false;
+        }
+
+        String targetDir = target + "/";
+        for(ZipEntry entry : entries) {
+            String name = entry.getName();
+            if(name.startsWith(targetDir)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Joins any number of maps together into a single map, combining their values into
+     * a list, maintaining values in the order the maps were passed in. Nulls are inserted
+     * for given keys when the map does not contain that key.
+     *
+     * i.e. joinMaps({'a' => 1, 'b' => 2}, {'b' => 3}, {'a' => 4, 'c' => 5}) ->
+     *      {'a' => [1, null, 4], 'b' => [2, 3, null], 'c' => [null, null, 5]}
+     *
+     * @param maps variable number of maps to join - order affects order of values in output.
+     * @return combined map
+     */
+    public static <K, V> Map<K, List<V>> joinMaps(Map<K, V>... maps) {
+        Map<K, List<V>> ret = new HashMap<>();
+
+        Set<K> keys = new HashSet<>();
+
+        for(Map<K, V> map : maps) {
+            keys.addAll(map.keySet());
+        }
+
+        for(Map<K, V> m : maps) {
+            for(K key : keys) {
+                V value = m.get(key);
+
+                if(!ret.containsKey(key)) {
+                    ret.put(key, new ArrayList<V>());
+                }
+
+                List<V> targetList = ret.get(key);
+                targetList.add(value);
+            }
+        }
+        return ret;
+    }
+
+    /**
+     * Fills up chunks out of a collection (given a maximum amount of chunks)
+     *
+     * i.e. partitionFixed(5, [1,2,3]) -> [[1,2,3]]
+     *      partitionFixed(5, [1..9]) -> [[1,2], [3,4], [5,6], [7,8], [9]]
+     *      partitionFixed(3, [1..10]) -> [[1,2,3,4], [5,6,7], [8,9,10]]
+     * @param maxNumChunks the maximum number of chunks to return
+     * @param coll the collection to be chunked up
+     * @return a list of the chunks, which are themselves lists.
+     */
+    public static <T> List<List<T>> partitionFixed(int maxNumChunks, Collection<T> coll) {
+        List<List<T>> ret = new ArrayList<>();
+
+        if(maxNumChunks == 0 || coll == null) {
+            return ret;
+        }
+
+        Map<Integer, Integer> parts = integerDivided(coll.size(), maxNumChunks);
+
+        // Keys sorted in descending order
+        List<Integer> sortedKeys = new ArrayList<Integer>(parts.keySet());
+        Collections.sort(sortedKeys, Collections.reverseOrder());
+
+
+        Iterator<T> it = coll.iterator();
+        for(Integer chunkSize : sortedKeys) {
+            if(!it.hasNext()) { break; }
+            Integer times = parts.get(chunkSize);
+            for(int i = 0; i < times; i++) {
+                if(!it.hasNext()) { break; }
+                List<T> chunkList = new ArrayList<>();
+                for(int j = 0; j < chunkSize; j++) {
+                    if(!it.hasNext()) { break; }
+                    chunkList.add(it.next());
+                }
+                ret.add(chunkList);
+            }
+        }
+
+        return ret;
+    }
+
+//    /**
+//     * Get a stack trace for the current thread
+//     *
+//     * @return a human-readable representation of the current thread's stack
+//     */
+//    public static String currentStackTrace() {
+//        StackTraceElement[] elems = Thread.currentThread().getStackTrace();
+//        List<String> lines = new ArrayList<String>();
+//
+//        for(StackTraceElement elem : elems) {
+//            lines.add(elem.toString());
+//        }
+//
+//        return String.join("\n", lines);
+//    }
+
+//    public static boolean iteratorDoesHaveNext(Iterator it) {
+//        return it != null && it.hasNext();
+//    }
 }
 
