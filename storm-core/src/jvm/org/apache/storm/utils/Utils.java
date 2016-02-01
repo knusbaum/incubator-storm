@@ -17,6 +17,11 @@
  */
 package org.apache.storm.utils;
 
+import org.apache.commons.exec.CommandLine;
+import org.apache.commons.exec.DefaultExecutor;
+import org.apache.commons.exec.ExecuteException;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.storm.Config;
 import org.apache.storm.blobstore.BlobStore;
 import org.apache.storm.blobstore.BlobStoreAclHandler;
@@ -29,7 +34,6 @@ import org.apache.storm.localizer.Localizer;
 import org.apache.storm.nimbus.NimbusInfo;
 import org.apache.storm.serialization.DefaultSerializationDelegate;
 import org.apache.storm.serialization.SerializationDelegate;
-import clojure.lang.IFn;
 import clojure.lang.RT;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -64,6 +68,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -74,11 +79,15 @@ import java.io.OutputStreamWriter;
 import java.io.PrintStream;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
+import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
@@ -89,11 +98,14 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.Vector;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
@@ -108,7 +120,7 @@ public class Utils {
     // tests by subclassing.
     private static final Utils INSTANCE = new Utils();
     private static Utils _instance = INSTANCE;
-    
+
     /**
      * Provide an instance of this class for delegates to use.  To mock out
      * delegated methods, provide an instance of a subclass that overrides the
@@ -118,7 +130,7 @@ public class Utils {
     public static void setInstance(Utils u) {
         _instance = u;
     }
-    
+
     /**
      * Resets the singleton instance to the default. This is helpful to reset
      * the class to its original functionality when mocking is no longer
@@ -127,7 +139,6 @@ public class Utils {
     public static void resetInstance() {
         _instance = INSTANCE;
     }
-
 
     private static final Logger LOG = LoggerFactory.getLogger(Utils.class);
     public static final String DEFAULT_STREAM_ID = "default";
@@ -566,6 +577,10 @@ public class Utils {
         return isSuccess;
     }
 
+    public static boolean checkFileExists(String path) {
+        return Files.exists(new File(path).toPath());
+    }
+
     public static boolean checkFileExists(String dir, String file) {
         return Files.exists(new File(dir, file).toPath());
     }
@@ -632,20 +647,23 @@ public class Utils {
     }
 
 
-    public static synchronized IFn loadClojureFn(String namespace, String name) {
+    public static synchronized clojure.lang.IFn loadClojureFn(String namespace, String name) {
         try {
             clojure.lang.Compiler.eval(RT.readString("(require '" + namespace + ")"));
         } catch (Exception e) {
             //if playing from the repl and defining functions, file won't exist
         }
-        return (IFn) RT.var(namespace, name).deref();
+        return (clojure.lang.IFn) RT.var(namespace, name).deref();
     }
 
     public static boolean isSystemId(String id) {
         return id.startsWith("__");
     }
 
-    public static <K, V> Map<V, K> reverseMap(Map<K, V> map) {
+    /*
+        TODO: Can this be replaced with reverseMap in this file?
+     */
+    public static <K, V> Map<V, K> simpleReverseMap(Map<K, V> map) {
         Map<V, K> ret = new HashMap<V, K>();
         for (Map.Entry<K, V> entry : map.entrySet()) {
             ret.put(entry.getValue(), entry.getKey());
@@ -1086,6 +1104,12 @@ public class Utils {
         }
     }
 
+    public static void testSetupBuilder(CuratorFrameworkFactory.Builder
+                                                builder, String zkStr, Map conf, ZookeeperAuthInfo auth)
+    {
+        setupBuilder(builder, zkStr, conf, auth);
+    }
+
     public static CuratorFramework newCurator(Map conf, List<String> servers, Object port, ZookeeperAuthInfo auth) {
         return newCurator(conf, servers, port, "", auth);
     }
@@ -1128,7 +1152,7 @@ public class Utils {
                 LOG.info("{}:{}", prefix, line);
             }
         } catch (IOException e) {
-            LOG.warn("Error whiel trying to log stream", e);
+            LOG.warn("Error while trying to log stream", e);
         }
     }
 
@@ -1406,6 +1430,7 @@ public class Utils {
         return topologyInfo;
     }
 
+
     /**
      * A cheap way to deterministically convert a number to a positive value. When the input is
      * positive, the original value is returned. When the input number is negative, the returned
@@ -1540,5 +1565,667 @@ public class Utils {
 //    public static boolean iteratorDoesHaveNext(Iterator it) {
 //        return it != null && it.hasNext();
 //    }
-}
 
+    //Everything from here on is translated from the old util.clj (storm-core/src/clj/backtype.storm/util.clj)
+
+    //Wraps an exception in a RuntimeException if needed
+    public static Exception wrapInRuntime (Exception e) {
+        if (e instanceof RuntimeException) {
+            return e;
+        } else {
+            return (new RuntimeException(e));
+        }
+    }
+
+    public static final boolean isOnWindows = "Windows_NT".equals(System.getenv("OS"));
+
+    public static final String filePathSeparator = System.getProperty("file.separator");
+
+    public static final String classPathSeparator = System.getProperty("path.separator");
+
+    public static final int sigKill = 9;
+    public static final int sigTerm = 15;
+
+
+
+    /*
+        Returns the first item of coll for which (pred item) returns logical true.
+        Consumes sequences up to the first match, will consume the entire sequence
+        and return nil if no match is found.
+     */
+    public static Object findFirst (IPredicate pred, Collection coll) {
+        if (coll == null || pred == null) {
+            return null;
+        } else {
+            Iterator<Object> iter = coll.iterator();
+            if (iter==null || !iter.hasNext()) {
+                return null;
+            } else {
+                do {
+                    Object obj = iter.next();
+                    if (pred.test(obj)) {
+                        return obj;
+                    }
+                } while (iter.hasNext());
+                return null;
+            }
+        }
+    }
+
+    public static Object findFirst (IPredicate pred, Map map) {
+        if (map == null || pred == null) {
+            return null;
+        } else {
+            Iterator<Object> iter = map.entrySet().iterator();
+            if (iter==null || !iter.hasNext()) {
+                return null;
+            } else {
+                do {
+                    Object obj = iter.next();
+                    if (pred.test(obj)) {
+                        return obj;
+                    }
+                } while (iter.hasNext());
+                return null;
+            }
+        }
+    }
+    /*
+        Note: since the following functions are nowhere used in Storm, they were not translated:
+        dissoc-in
+        indexed
+        positions
+        assoc-conj
+        set-delta
+
+        clojurify-structure  because it wouldn't make sense without clojure
+     */
+
+
+    public static String localHostname () throws UnknownHostException {
+        return _instance.localHostnameImpl();
+    }
+
+    protected String localHostnameImpl () throws UnknownHostException {
+        return InetAddress.getLocalHost().getCanonicalHostName();
+    }
+
+    private static String memoizedLocalHostnameString = null;
+
+    public static String memoizedLocalHostname () throws UnknownHostException {
+        if (memoizedLocalHostnameString == null) {
+            memoizedLocalHostnameString = localHostname();
+        }
+        return memoizedLocalHostnameString;
+    }
+
+    /*
+        checks conf for STORM_LOCAL_HOSTNAME.
+        when unconfigured, falls back to (memoized) guess by `local-hostname`.
+    */
+    public static String hostname (Map<String, Object> conf) throws UnknownHostException  {
+        if (conf == null) {
+            return memoizedLocalHostname();
+        }
+        Object hostnameString = conf.get(Config.STORM_LOCAL_HOSTNAME);
+        if (hostnameString == null ) {
+            return memoizedLocalHostname();
+        }
+        if (hostnameString.equals("")) {
+            return memoizedLocalHostname();
+        }
+        return hostnameString.toString();
+    }
+
+    public static String uuid() {
+        return UUID.randomUUID().toString();
+    }
+
+    public static int currentTimeSecs() {
+        return Time.currentTimeSecs();
+    }
+
+    public static long currentTimeMillis() {
+        return Time.currentTimeMillis();
+    }
+
+    public static long secsToMillisLong(double secs) {
+        return (long) (1000 * secs);
+    }
+
+    public static Vector<String> tokenizePath (String path) {
+        String[] tokens = path.split("/");
+        Vector<String> outputs = new Vector<String>();
+        if (tokens == null || tokens.length == 0) {
+            return null;
+        }
+        for (String tok: tokens) {
+            if (!tok.isEmpty()) {
+                outputs.add(tok);
+            }
+        }
+        return outputs;
+    }
+
+    public static String parentPath(String path) {
+        if (path == null) {
+            return "/";
+        }
+        Vector<String> tokens = tokenizePath(path);
+        int length = tokens.size();
+        if (length == 0) {
+            return "/";
+        }
+        String output = "";
+        for (int i = 0; i < length - 1; i++) {  //length - 1 to mimic "butlast" from the old clojure code
+            output = output + "/" + tokens.get(i);
+        }
+        return output;
+    }
+
+    public static String toksToPath (Vector<String> toks) {
+        if (toks == null) {
+            return "/";
+        }
+        int length = toks.size();
+        if (length == 0) {
+            return "/";
+        }
+        String output = "";
+        for (int i = 0; i < length; i++) {
+            output = output + "/" + toks.get(i);
+        }
+        return output;
+    }
+    public static String normalizePath (String path) {
+        return toksToPath(tokenizePath(path));
+    }
+
+    /* TODO: This function was originally written to replace map-val in util.clj. But we decided to change the coding
+             style in the caller functions to a more Java style for loop. This is mentioned in TODOs across the clojure
+             files.
+     */
+    public static Map mapVal (IFn aFn, Map amap) {
+        Map newMap = new HashMap();
+        if (amap == null) {
+            return newMap;
+        }
+        if (amap.keySet()==null) {
+            return newMap;
+        }
+        for (Object key: amap.keySet()) {
+            Object value = amap.get(key);
+            if (value == null) {
+                newMap.put(key, null);
+            } else {
+                Object newValue = aFn.eval(value);
+                newMap.put(key, newValue);
+            }
+        }
+        return newMap;
+    }
+
+    /* TODO: This function was originally written to replace map-val in util.clj. But we decided to change the coding
+         style in the caller functions to a more Java style for loop. This is mentioned in TODOs across the clojure
+         files.
+    */
+//    public static Map filterVal(IPredicate aFn, Map amap) {
+//        Map newMap = new HashMap();
+//        if (amap == null) {
+//            return newMap;
+//        }
+//        for (Object key: amap.keySet()) {
+//            Object value = amap.get(key);
+//            if(aFn.test(value)) {
+//                newMap.put(key, value);
+//            }
+//        }
+//        return newMap;
+//    }
+
+    /* TODO: This function was originally written to replace filter-key in util.clj. But we decided to change the coding
+         style in the caller functions to a more Java style for loop + if conditionals. This is mentioned in TODOs
+         across the clojure files.
+    */
+//    public static Map filterKey(IPredicate aFn, Map amap) {
+//        Map newMap = new HashMap();
+//        if (amap == null) {
+//            return newMap;
+//        }
+//        for (Object key: amap.keySet()) {
+//            Object value = amap.get(key);
+//            if(aFn.test(key)) {
+//                newMap.put(key, value);
+//            }
+//        }
+//        return newMap;
+//    }
+
+    /* TODO: This function was originally written to replace map-key in util.clj. But we decided to change the coding
+         style in the caller functions to a more Java style for loop. This is mentioned in TODOs across the clojure
+         files.
+    */
+//    public static Map mapKey (IFn aFn, Map amap) {
+//        Map newMap = new HashMap();
+//        if (amap == null) {
+//            return newMap;
+//        }
+//        for (Object key: amap.keySet()) {
+//            Object value = amap.get(key);
+//            Object newKey = aFn.eval(key);
+//            newMap.put(newKey, value);
+//        }
+//        return newMap;
+//    }
+
+    /* TODO: This function was originally written to replace separate in util.clj. But since it was only used in
+    transactional_test.clj, the separate function was moved there for now.
+    */
+    public static Vector<Collection> separate (IPredicate pred, Collection aseq) {
+        Vector<Collection> outputVector = new Vector<Collection>();
+        Collection pass = new HashSet();
+        Collection notPass = new HashSet();
+        for (Object obj: aseq) {
+            if (pred.test(obj)) {
+                pass.add(obj);
+            } else {
+                notPass.add(obj);
+            }
+        }
+        outputVector.add(pass);
+        outputVector.add(notPass);
+        return outputVector;
+    }
+
+    public static void exitProcess (int val, Object... msg) {
+        String combinedErrorMessage = "";
+        for (Object oneMessage: msg) {
+            combinedErrorMessage = combinedErrorMessage + oneMessage.toString();
+        }
+        LOG.error("halting process: " + combinedErrorMessage, new RuntimeException(combinedErrorMessage));
+        Runtime.getRuntime().exit(val);
+    }
+
+    public static Double sum(Collection<Number> vals) {
+        double sum = 0.0;
+        double dVal;
+        if (vals == null) {
+            return 0.0;
+        }
+        for (Number val: vals) {
+            dVal = val.doubleValue();
+            sum = sum + dVal;
+        }
+        return new Double(sum);
+    }
+
+
+    public static Object defaulted(Object val, Object defaultObj) {
+        if (val != null) {
+            return val;
+        } else {
+            return defaultObj;
+        }
+    }
+
+    /**
+     * "{:a 1 :b 1 :c 2} -> {1 [:a :b] 2 :c}"
+     *
+     * Example usage in java:
+     *  Map<Integer, String> tasks;
+     *  Map<String, List<Integer>> componentTasks = Utils.reverse_map(tasks);
+     *
+     * @param map
+     * @return
+     */
+    public static <K, V> HashMap<V, List<K>> reverseMap(Map<K, V> map) {
+        HashMap<V, List<K>> rtn = new HashMap<V, List<K>>();
+        if (map == null) {
+            return rtn;
+        }
+        for (Entry<K, V> entry : map.entrySet()) {
+            K key = entry.getKey();
+            V val = entry.getValue();
+            List<K> list = rtn.get(val);
+            if (list == null) {
+                list = new ArrayList<K>();
+                rtn.put(entry.getValue(), list);
+            }
+            list.add(key);
+        }
+        return rtn;
+    }
+
+    /**
+     * "{:a 1 :b 1 :c 2} -> {1 [:a :b] 2 :c}"
+     *
+     */
+    public static HashMap reverseMap(List listSeq) {
+        HashMap<Object, List<Object>> rtn = new HashMap();
+        if (listSeq == null) {
+            return rtn;
+        }
+        for (Object entry : listSeq) {
+            List listEntry = (List) entry;
+            Object key = listEntry.get(0);
+            Object val = listEntry.get(1);
+            List list = rtn.get(val);
+            if (list == null) {
+                list = new ArrayList<Object>();
+                rtn.put(val, list);
+            }
+            list.add(key);
+        }
+        return rtn;
+    }
+
+
+    /**
+     * Gets the pid of this JVM, because Java doesn't provide a real way to do this.
+     *
+     * @return
+     */
+    public static String processPid() throws RuntimeException {
+        String name = ManagementFactory.getRuntimeMXBean().getName();
+        String[] split = name.split("@");
+        if (split.length != 2) {
+            throw new RuntimeException("Got unexpected process name: " + name);
+        }
+        return split[0];
+    }
+
+    public static int execCommand(String command) throws ExecuteException, IOException {
+        String[] cmdlist = command.split(" ");
+        CommandLine cmd = new CommandLine(cmdlist[0]);
+        for (int i = 1; i < cmdlist.length; i++) {
+            cmd.addArgument(cmdlist[i]);
+        }
+
+        DefaultExecutor exec = new DefaultExecutor();
+        return exec.execute(cmd);
+    }
+
+    /**
+     * Extra dir from the jar to destdir
+     *
+     * @param jarpath
+     * @param dir
+     * @param destdir
+     *
+    (with-open [jarpath (ZipFile. jarpath)]
+    (let [entries (enumeration-seq (.entries jarpath))]
+    (doseq [file (filter (fn [entry](and (not (.isDirectory entry)) (.startsWith (.getName entry) dir))) entries)]
+    (.mkdirs (.getParentFile (File. destdir (.getName file))))
+    (with-open [out (FileOutputStream. (File. destdir (.getName file)))]
+    (io/copy (.getInputStream jarpath file) out)))))
+
+     */
+    public static void extractDirFromJar(String jarpath, String dir, String destdir) {
+        JarFile jarFile = null;
+        FileOutputStream out = null;
+        InputStream in = null;
+        try {
+            jarFile = new JarFile(jarpath);
+            Enumeration<JarEntry> jarEnums = jarFile.entries();
+            while (jarEnums.hasMoreElements()) {
+                JarEntry entry = jarEnums.nextElement();
+                if (!entry.isDirectory() && entry.getName().startsWith(dir)) {
+                    File aFile = new File(destdir, entry.getName());
+                    aFile.getParentFile().mkdirs();
+                    out = new FileOutputStream(aFile);
+                    in = jarFile.getInputStream(entry);
+                    IOUtils.copy(in, out);
+                    out.close();
+                    in.close();
+                }
+            }
+        } catch (IOException e) {
+            LOG.info("Could not extract {} from {}", dir, jarpath);
+        } finally {
+            if (jarFile != null) {
+                try {
+                    jarFile.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(
+                            "Something really strange happened when trying to close the jar file" + jarpath);
+                }
+            }
+            if (out != null) {
+                try {
+                    out.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(
+                            "Something really strange happened when trying to close the output for jar file" + jarpath);
+                }
+            }
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(
+                            "Something really strange happened when trying to close the input for jar file" + jarpath);
+                }
+            }
+        }
+
+    }
+
+    public static int sendSignalToProcess(long pid, int signum) {
+        int retval = 0;
+        try {
+            String killString = null;
+            if (onWindows()) {
+                if (signum == sigKill) {
+                    killString = "taskkill /f /pid ";
+                } else {
+                    killString = "taskkill /pid ";
+                }
+            } else {
+                killString = "kill -" + signum + " ";
+            }
+            killString = killString + pid;
+            retval = execCommand(killString);
+        } catch (ExecuteException e) {
+            LOG.info("Error when trying to kill " + pid + ". Process is probably already dead.");
+        } catch (IOException e) {
+            LOG.info("IOException Error when trying to kill " + pid + ".");
+        } finally {
+            return retval;
+        }
+    }
+
+    public static int forceKillProcess (long pid) {
+        return sendSignalToProcess(pid, sigKill);
+    }
+
+    public static int forceKillProcess (String pid) {
+        return sendSignalToProcess(Long.parseLong(pid), sigKill);
+    }
+
+    public static int killProcessWithSigTerm (long pid) {
+        return sendSignalToProcess(pid, sigTerm);
+    }
+    public static int killProcessWithSigTerm (String pid) {
+        return sendSignalToProcess(Long.parseLong(pid), sigTerm);
+    }
+
+    /*
+        Adds the user supplied function as a shutdown hook for cleanup.
+        Also adds a function that sleeps for a second and then sends kill -9
+        to process to avoid any zombie process in case cleanup function hangs.
+     */
+    public static void addShutdownHookWithForceKillIn1Sec (Runnable func) {
+        Runnable sleepKill = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Time.sleepSecs(1);
+                    Runtime.getRuntime().halt(20);
+                } catch (Exception e) {
+                    LOG.warn("Exception in the ShutDownHook: " + e);
+                }
+            }
+        };
+        Runtime.getRuntime().addShutdownHook(new Thread(func));
+        Runtime.getRuntime().addShutdownHook(new Thread(sleepKill));
+    }
+
+
+    /*
+        This function checks the command line argument that will be issued by the supervisor to launch a worker,
+        and makes sure it is safe to execute. This is done by replacing any single quote charachter with a
+        safe combination of single and double quotes. For example:
+        if a file is named:    foo'bar"
+        the shell cannot parse it, as soon as it reaches the first single quote, it tries to find the closing quote
+        Instead, we change it to:  'foo'"'"'bar"' which is now perfectly readable by the shell.
+     */
+    public static String shellCmd (Collection<String> command) {
+        Vector<String> changedCommands = new Vector<>();
+        for (String str: command) {
+            changedCommands.add("'" + str.replaceAll("'", "'\"'\"'") + "'");
+        }
+        return StringUtils.join(changedCommands, " ");
+    }
+
+    public static String scriptFilePath (String dir) {
+        return dir + filePathSeparator + "storm-worker-script.sh";
+    }
+
+    public static String containerFilePath (String dir) {
+        return dir + filePathSeparator + "launch_container.sh";
+    }
+
+    /**
+     * Deletes a file or directory and its contents if it exists. Does not
+     * complain if the input is null or does not exist.
+     * @param path the path to the file or directory
+     */
+    public static void forceDelete(String path) {
+        _instance.forceDeleteImpl(path);
+    }
+
+    protected void forceDeleteImpl(String path) {
+        LOG.debug("Deleting path {}", path);
+        if (checkFileExists(path)) {
+            try {
+                FileUtils.forceDelete(new File(path));
+            } catch (IOException ignored) {}
+        }
+    }
+
+    /**
+     * Creates a symbolic link to the target
+     * @param dir the parent directory of the link
+     * @param targetDir the parent directory of the link's target
+     * @param targetFilename the file name of the links target
+     * @param filename the file name of the link
+     * @return the path of the link if it did not exist, otherwise null
+     * @throws IOException
+     */
+    public static Path createSymlink(String dir, String targetDir,
+            String targetFilename, String filename) throws IOException {
+        Path path = Paths.get(dir, filename).toAbsolutePath();
+        Path target = Paths.get(targetDir, targetFilename).toAbsolutePath();
+        LOG.debug("Creating symlink [{}] to [{}]", path, target);
+        if (!path.toFile().exists()) {
+            return Files.createSymbolicLink(path, target);
+        }
+        return null;
+    }
+
+    /**
+     * Convenience method for the case when the link's file name should be the
+     * same as the file name of the target
+     */
+    public static Path createSymlink(String dir, String targetDir,
+                                     String targetFilename) throws IOException {
+        return Utils.createSymlink(dir, targetDir, targetFilename,
+                targetFilename);
+    }
+
+    /**
+     * Returns a Collection of file names found under the given directory.
+     * @param dir a directory
+     * @return the Collection of file names
+     */
+    public static Collection<String> readDirContents(String dir) {
+        Collection<String> ret = new HashSet<>();
+        File[] files = new File(dir).listFiles();
+        if (files != null) {
+            for (File f: files) {
+                ret.add(f.getName());
+            }
+        }
+        return ret;
+    }
+
+    /**
+     * Returns the value of java.class.path System property. Kept separate for
+     * testing.
+     * @return the classpath
+     */
+    public static String currentClasspath() {
+        return _instance.currentClasspathImpl();
+    }
+
+    public String currentClasspathImpl() {
+        return System.getProperty("java.class.path");
+    }
+
+    /**
+     * Returns a collection of jar file names found under the given directory.
+     * @param dir the directory to search
+     * @return the jar file names
+     */
+    private static Collection<String> getFullJars(String dir) {
+        File[] files = new File(dir).listFiles(new FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String name) {
+                return name.endsWith(".jar");
+            }
+        });
+        Collection<String> ret = new HashSet<String>(files.length);
+        for (File f : files) {
+            ret.add(Paths.get(dir, f.getName()).toString());
+        }
+        return ret;
+    }
+
+    public static String workerClasspath() {
+        String stormDir = System.getProperty("storm.home");
+        String stormLibDir = Paths.get(stormDir, "lib").toString();
+        String stormConfDir =
+                System.getenv("STORM_CONF_DIR") != null ?
+                System.getenv("STORM_CONF_DIR") :
+                Paths.get(stormDir, "conf").toString();
+        String stormExtlibDir = Paths.get(stormDir, "extlib").toString();
+        String extcp = System.getenv("STORM_EXT_CLASSPATH");
+        if (stormDir == null) {
+            return Utils.currentClasspath();
+        }
+        List<String> pathElements = new LinkedList<>();
+        pathElements.addAll(Utils.getFullJars(stormLibDir));
+        pathElements.addAll(Utils.getFullJars(stormExtlibDir));
+        pathElements.add(extcp);
+        pathElements.add(stormConfDir);
+
+        return StringUtils.join(pathElements,
+                System.getProperty("path.separator"));
+    }
+
+    public static String addToClasspath(String classpath,
+                Collection<String> paths) {
+        return _instance.addToClasspathImpl(classpath, paths);
+    }
+
+    public String addToClasspathImpl(String classpath,
+                Collection<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return classpath;
+        }
+        List<String> l = new LinkedList<>();
+        l.add(classpath);
+        l.addAll(paths);
+        return StringUtils.join(l, System.getProperty("path.separator"));
+    }
+}

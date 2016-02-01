@@ -16,6 +16,7 @@
 
 (ns org.apache.storm.cluster-state.zookeeper-state-factory
   (:import [org.apache.curator.framework.state ConnectionStateListener])
+  (:import [org.apache.storm.utils Utils])
   (:import [org.apache.zookeeper KeeperException$NoNodeException]
            [org.apache.storm.cluster ClusterState DaemonType])
   (:use [org.apache.storm cluster config log util])
@@ -61,7 +62,7 @@
 
      (register
        [this callback]
-       (let [id (uuid)]
+       (let [id (Utils/uuid)]
          (swap! callbacks assoc id callback)
          id))
 
@@ -71,7 +72,7 @@
 
      (set-ephemeral-node
        [this path data acls]
-       (zk/mkdirs zk-writer (parent-path path) acls)
+       (zk/mkdirs zk-writer (Utils/parentPath path) acls)
        (if (zk/exists zk-writer path false)
          (try-cause
            (zk/set-data zk-writer path data) ; should verify that it's ephemeral
@@ -90,7 +91,7 @@
        (if (zk/exists zk-writer path false)
          (zk/set-data zk-writer path data)
          (do
-           (zk/mkdirs zk-writer (parent-path path) acls)
+           (zk/mkdirs zk-writer (Utils/parentPath path) acls)
            (zk/create-node zk-writer path data :persistent acls))))
 
      (set-worker-hb

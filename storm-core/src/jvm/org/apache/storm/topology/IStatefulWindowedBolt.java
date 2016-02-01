@@ -15,20 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.storm.topology;
 
-package org.apache.storm.utils;
+import org.apache.storm.state.State;
 
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.retry.ExponentialBackoffRetry;
-import java.util.Map;
-
-public class TestUtils extends Utils {
-
-    public static void testSetupBuilder(CuratorFrameworkFactory.Builder
-            builder, String zkStr, Map conf, ZookeeperAuthInfo auth)
-    {
-        setupBuilder(builder, zkStr, conf, auth);
-    }
-
+/**
+ * A windowed bolt abstraction for supporting windowing operation with state
+ */
+public interface IStatefulWindowedBolt<T extends State> extends IStatefulComponent<T>, IWindowedBolt {
 }

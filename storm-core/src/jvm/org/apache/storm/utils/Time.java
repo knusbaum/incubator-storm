@@ -86,9 +86,15 @@ public class Time {
                 Thread.sleep(sleepTime);
         }
     }
-    
+
     public static void sleep(long ms) throws InterruptedException {
         sleepUntil(currentTimeMillis()+ms);
+    }
+
+    public static void sleepSecs (long secs) throws InterruptedException {
+        if (secs > 0) {
+            sleep(secs * 1000);
+        }
     }
     
     public static long currentTimeMillis() {
@@ -101,6 +107,14 @@ public class Time {
     
     public static int currentTimeSecs() {
         return (int) (currentTimeMillis() / 1000);
+    }
+
+    public static int delta(int timeInSeconds) {
+        return Time.currentTimeSecs() - timeInSeconds;
+    }
+
+    public static long deltaMs(long timeInMilliseconds) {
+        return System.currentTimeMillis() - timeInMilliseconds;
     }
     
     public static void advanceTime(long ms) {

@@ -23,14 +23,16 @@
            [org.apache.storm.nimbus InMemoryTopologyActionNotifier])
   (:import [org.apache.storm.scheduler INimbus])
   (:import [org.apache.storm.nimbus ILeaderElector NimbusInfo])
+  (:import [org.apache.storm.testing.staticmocking MockedConfigUtils])
   (:import [org.apache.storm.generated Credentials NotAliveException SubmitOptions
             TopologyInitialStatus TopologyStatus AlreadyAliveException KillOptions RebalanceOptions
             InvalidTopologyException AuthorizationException
             LogConfig LogLevel LogLevelAction])
   (:import [java.util HashMap])
   (:import [java.io File])
-  (:import [org.apache.storm.utils Time Utils])
-  (:import [org.apache.commons.io FileUtils])
+  (:import [org.apache.storm.utils Time Utils ConfigUtils IPredicate])
+  (:import [org.apache.commons.io FileUtils]
+           [org.json.simple JSONValue])
   (:use [org.apache.storm testing MockAutoCred util config log timer zookeeper])
   (:use [org.apache.storm.daemon common])
   (:require [conjure.core])
@@ -39,12 +41,20 @@
              [cluster :as cluster]])
   (:use [conjure core]))
 
+(defn- from-json
+       [^String str]
+       (if str
+         (clojurify-structure
+           (JSONValue/parse str))
+         nil))
+
 (defn storm-component->task-info [cluster storm-name]
   (let [storm-id (get-storm-id (:storm-cluster-state cluster) storm-name)
         nimbus (:nimbus cluster)]
     (-> (.getUserTopology nimbus storm-id)
         (storm-task-info (from-json (.getTopologyConf nimbus storm-id)))
-        reverse-map)))
+        (Utils/reverseMap)
+        clojurify-structure)))
 
 (defn getCredentials [cluster storm-name]
   (let [storm-id (get-storm-id (:storm-cluster-state cluster) storm-name)]
@@ -63,12 +73,13 @@
          keys
          (map (fn [e] {e (get-component e)}))
          (apply merge)
-         reverse-map)))
+         (Utils/reverseMap)
+         clojurify-structure)))
 
 (defn storm-num-workers [state storm-name]
   (let [storm-id (get-storm-id state storm-name)
         assignment (.assignment-info state storm-id nil)]
-    (count (reverse-map (:executor->node+port assignment)))
+    (count (clojurify-structure (Utils/reverseMap (:executor->node+port assignment))))
     ))
 
 (defn topology-nodes [state storm-name]
@@ -90,6 +101,7 @@
          set         
          )))
 
+;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defn topology-node-distribution [state storm-name]
   (let [storm-id (get-storm-id state storm-name)
         assignment (.assignment-info state storm-id nil)]
@@ -124,14 +136,13 @@
         curr-beat (.get-worker-heartbeat state storm-id node port)
         stats (:executor-stats curr-beat)]
     (.worker-heartbeat! state storm-id node port
-      {:storm-id storm-id :time-secs (current-time-secs) :uptime 10 :executor-stats (merge stats {executor (stats/render-stats! (stats/mk-bolt-stats 20))})}
+      {:storm-id storm-id :time-secs (Utils/currentTimeSecs) :uptime 10 :executor-stats (merge stats {executor (stats/render-stats! (stats/mk-bolt-stats 20))})}
       )))
 
 (defn slot-assignments [cluster storm-id]
   (let [state (:storm-cluster-state cluster)
         assignment (.assignment-info state storm-id nil)]
-    (reverse-map (:executor->node+port assignment))
-    ))
+        (clojurify-structure (Utils/reverseMap (:executor->node+port assignment)))))
 
 (defn task-ids [cluster storm-id]
   (let [nimbus (:nimbus cluster)]
@@ -141,14 +152,15 @@
 
 (defn topology-executors [cluster storm-id]
   (let [state (:storm-cluster-state cluster)
-        assignment (.assignment-info state storm-id nil)]
-    (keys (:executor->node+port assignment))
+        assignment (.assignment-info state storm-id nil)
+        ret-keys (keys (:executor->node+port assignment))
+        _ (log-message "ret-keys: " (pr-str ret-keys)) ]
+    ret-keys
     ))
 
 (defn check-distribution [items distribution]
-  (let [dist (->> items (map count) multi-set)]
-    (is (= dist (multi-set distribution)))
-    ))
+  (let [counts (map count items)]
+    (is (ms= counts distribution))))
 
 (defn disjoint? [& sets]
   (let [combined (apply concat sets)]
@@ -279,6 +291,18 @@
       (is (= (.get (getCredentials cluster topology-name) nimbus-cred-key) nimbus-cred-renew-val))
       (is (= (.get (getCredentials cluster topology-name) gateway-cred-key) gateway-cred-renew-val)))))
 
+(defmacro letlocals
+  [& body]
+  (let [[tobind lexpr] (split-at (dec (count body)) body)
+        binded (vec (mapcat (fn [e]
+                              (if (and (list? e) (= 'bind (first e)))
+                                [(second e) (last e)]
+                                ['_ e]
+                                ))
+                            tobind))]
+    `(let ~binded
+       ~(first lexpr))))
+
 (deftest test-isolated-assignment
   (with-simulated-time-local-cluster [cluster :supervisors 6
                                :ports-per-supervisor 3
@@ -352,6 +376,7 @@
       (is (= 2 (storm-num-workers state "mystorm"))) ;; because only 2 executors
       )))
 
+;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (deftest test-executor-assignments
   (with-simulated-time-local-cluster[cluster :daemon-conf {SUPERVISOR-ENABLE false TOPOLOGY-ACKER-EXECUTORS 0 TOPOLOGY-EVENTLOGGER-EXECUTORS 0}]
     (let [nimbus (:nimbus cluster)
@@ -610,32 +635,54 @@
       (bind [executor-id1 executor-id2]  (topology-executors cluster storm-id))
       (bind ass1 (executor-assignment cluster storm-id executor-id1))
       (bind ass2 (executor-assignment cluster storm-id executor-id2))
+      (bind _ (log-message "ass1, t0: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t0: " (pr-str ass2)))
 
       (advance-cluster-time cluster 30)
+      (bind _ (log-message "ass1, t30, pre beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t30, pre beat: " (pr-str ass2)))
       (do-executor-heartbeat cluster storm-id executor-id1)
       (do-executor-heartbeat cluster storm-id executor-id2)
+      (bind _ (log-message "ass1, t30, post beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t30, post beat: " (pr-str ass2)))
 
       (advance-cluster-time cluster 13)
+      (bind _ (log-message "ass1, t43, pre beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t43, pre beat: " (pr-str ass2)))
       (is (= ass1 (executor-assignment cluster storm-id executor-id1)))
       (is (= ass2 (executor-assignment cluster storm-id executor-id2)))
       (do-executor-heartbeat cluster storm-id executor-id1)
+      (bind _ (log-message "ass1, t43, post beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t43, post beat: " (pr-str ass2)))
 
       (advance-cluster-time cluster 11)
+      (bind _ (log-message "ass1, t54, pre beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t54, pre beat: " (pr-str ass2)))
       (do-executor-heartbeat cluster storm-id executor-id1)
+      (bind _ (log-message "ass1, t54, post beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t54, post beat: " (pr-str ass2)))
       (is (= ass1 (executor-assignment cluster storm-id executor-id1)))
       (check-consistency cluster "test")
 
       ; have to wait an extra 10 seconds because nimbus may not
       ; resynchronize its heartbeat time till monitor-time secs after
       (advance-cluster-time cluster 11)
+      (bind _ (log-message "ass1, t65, pre beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t65, pre beat: " (pr-str ass2)))
       (do-executor-heartbeat cluster storm-id executor-id1)
+      (bind _ (log-message "ass1, t65, post beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t65, post beat: " (pr-str ass2)))
       (is (= ass1 (executor-assignment cluster storm-id executor-id1)))
       (check-consistency cluster "test")
 
       (advance-cluster-time cluster 11)
+      (bind _ (log-message "ass1, t76, pre beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t76, pre beat: " (pr-str ass2)))
       (is (= ass1 (executor-assignment cluster storm-id executor-id1)))
       (is (not= ass2 (executor-assignment cluster storm-id executor-id2)))
       (bind ass2 (executor-assignment cluster storm-id executor-id2))
+      (bind _ (log-message "ass1, t76, post beat: " (pr-str ass1)))
+      (bind _ (log-message "ass2, t76, post beat: " (pr-str ass2)))
       (check-consistency cluster "test")
 
       (advance-cluster-time cluster 31)
@@ -839,6 +886,7 @@
                        ))))
       )))
 
+;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (deftest test-rebalance-change-parallelism
   (with-simulated-time-local-cluster [cluster :supervisors 4 :ports-per-supervisor 3
     :daemon-conf {SUPERVISOR-ENABLE false
@@ -1020,7 +1068,7 @@
     (with-local-tmp [nimbus-dir]
       (stubbing [zk-leader-elector (mock-leader-elector)]
         (letlocals
-         (bind conf (merge (read-storm-config)
+         (bind conf (merge (clojurify-structure (ConfigUtils/readStormConfig))
                            {STORM-ZOOKEEPER-SERVERS ["localhost"]
                             STORM-CLUSTER-MODE "local"
                             STORM-ZOOKEEPER-PORT zk-port
@@ -1091,7 +1139,7 @@
     (with-local-tmp [nimbus-dir]
       (stubbing [zk-leader-elector (mock-leader-elector)]
         (letlocals
-          (bind conf (merge (read-storm-config)
+          (bind conf (merge (clojurify-structure (ConfigUtils/readStormConfig))
                        {STORM-ZOOKEEPER-SERVERS ["localhost"]
                         STORM-CLUSTER-MODE "local"
                         STORM-ZOOKEEPER-PORT zk-port
@@ -1198,21 +1246,23 @@
 
       (let [expected-name topology-name
             expected-conf {TOPOLOGY-NAME expected-name
-                           :foo :bar}]
+                           "foo" "bar"}]
 
         (testing "getTopologyConf calls check-authorization! with the correct parameters."
-          (let [expected-operation "getTopologyConf"]
+          (let [expected-operation "getTopologyConf"
+                expected-conf-json (JSONValue/toJSONString expected-conf)]
             (stubbing [nimbus/check-authorization! nil
-                       nimbus/try-read-storm-conf expected-conf
-                       util/to-json nil]
+                       nimbus/try-read-storm-conf expected-conf]
               (try
-                (.getTopologyConf nimbus "fake-id")
+                (is (= expected-conf
+                       (->> (.getTopologyConf nimbus "fake-id")
+                            JSONValue/parse 
+                            clojurify-structure)))
                 (catch NotAliveException e)
                 (finally
                   (verify-first-call-args-for-indices
                     nimbus/check-authorization!
-                      [1 2 3] expected-name expected-conf expected-operation)
-                  (verify-first-call-args-for util/to-json expected-conf))))))
+                      [1 2 3] expected-name expected-conf expected-operation))))))
 
         (testing "getTopology calls check-authorization! with the correct parameters."
           (let [expected-operation "getTopology"]
@@ -1334,16 +1384,18 @@
   (testing "nimbus-data uses correct ACLs"
     (let [scheme "digest"
           digest "storm:thisisapoorpassword"
-          auth-conf (merge (read-storm-config)
+          auth-conf (merge (clojurify-structure (ConfigUtils/readStormConfig))
                     {STORM-ZOOKEEPER-AUTH-SCHEME scheme
                      STORM-ZOOKEEPER-AUTH-PAYLOAD digest
                      STORM-PRINCIPAL-TO-LOCAL-PLUGIN "org.apache.storm.security.auth.DefaultPrincipalToLocal"
                      NIMBUS-THRIFT-PORT 6666})
           expected-acls nimbus/NIMBUS-ZK-ACLS
           fake-inimbus (reify INimbus (getForcedScheduler [this] nil))]
-      (with-open [_ (proxy [MockedUtils] [] (newInstanceImpl [_]))]
-        (stubbing [nimbus-topo-history-state nil
-                   mk-authorization-handler nil
+
+      (with-open [_ (proxy [MockedUtils] [] (newInstanceImpl [_]))
+                  _ (proxy [MockedConfigUtils] []
+                      (nimbusTopoHistoryStateImpl [conf] nil))]
+        (stubbing [mk-authorization-handler nil
                    cluster/mk-storm-cluster-state nil
                    nimbus/file-cache-map nil
                    nimbus/mk-blob-cache-map nil
@@ -1381,14 +1433,14 @@
   (with-inprocess-zookeeper zk-port
     (with-local-tmp [nimbus-dir]
       (letlocals
-        (bind conf (merge (read-storm-config)
+        (bind conf (merge (clojurify-structure (ConfigUtils/readStormConfig))
                      {STORM-ZOOKEEPER-SERVERS ["localhost"]
                       STORM-CLUSTER-MODE "local"
                       STORM-ZOOKEEPER-PORT zk-port
                       STORM-LOCAL-DIR nimbus-dir}))
         (bind cluster-state (cluster/mk-storm-cluster-state conf))
         (bind nimbus (nimbus/service-handler conf (nimbus/standalone-nimbus)))
-        (sleep-secs 1)
+        (Time/sleepSecs 1)
         (bind topology (thrift/mk-topology
                          {"1" (thrift/mk-spout-spec (TestPlannerSpout. true) :parallelism-hint 3)}
                          {}))
@@ -1411,7 +1463,7 @@
     (with-local-tmp [nimbus-dir]
       (stubbing [zk-leader-elector (mock-leader-elector)]
         (letlocals
-          (bind conf (merge (read-storm-config)
+          (bind conf (merge (clojurify-structure (ConfigUtils/readStormConfig))
                        {STORM-ZOOKEEPER-SERVERS ["localhost"]
                         STORM-CLUSTER-MODE "local"
                         STORM-ZOOKEEPER-PORT zk-port
@@ -1420,7 +1472,7 @@
           (bind cluster-state (cluster/mk-storm-cluster-state conf))
           (bind nimbus (nimbus/service-handler conf (nimbus/standalone-nimbus)))
           (bind notifier (InMemoryTopologyActionNotifier.))
-          (sleep-secs 1)
+          (Time/sleepSecs 1)
           (bind topology (thrift/mk-topology
                            {"1" (thrift/mk-spout-spec (TestPlannerSpout. true) :parallelism-hint 3)}
                            {}))

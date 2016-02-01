@@ -28,7 +28,7 @@
   (:import [org.apache.storm.grouping CustomStreamGrouping])
   (:import [org.apache.storm.task WorkerTopologyContext IBolt OutputCollector IOutputCollector])
   (:import [org.apache.storm.generated GlobalStreamId])
-  (:import [org.apache.storm.utils Utils TupleUtils MutableObject RotatingMap RotatingMap$ExpiredCallback MutableLong Time DisruptorQueue WorkerBackpressureThread])
+  (:import [org.apache.storm.utils Utils ConfigUtils TupleUtils MutableObject RotatingMap RotatingMap$ExpiredCallback MutableLong Time DisruptorQueue WorkerBackpressureThread])
   (:import [com.lmax.disruptor InsufficientCapacityException])
   (:import [org.apache.storm.serialization KryoTupleSerializer])
   (:import [org.apache.storm.daemon Shutdownable])
@@ -36,7 +36,8 @@
   (:import [org.apache.storm Config Constants])
   (:import [org.apache.storm.cluster ClusterStateContext DaemonType])
   (:import [org.apache.storm.grouping LoadAwareCustomStreamGrouping LoadAwareShuffleGrouping LoadMapping ShuffleGrouping])
-  (:import [java.util.concurrent ConcurrentLinkedQueue])
+  (:import [java.util.concurrent ConcurrentLinkedQueue]
+           (org.json.simple JSONValue))
   (:require [org.apache.storm [thrift :as thrift]
              [cluster :as cluster] [disruptor :as disruptor] [stats :as stats]])
   (:require [org.apache.storm.daemon [task :as task]])
@@ -109,6 +110,7 @@
         :direct
       )))
 
+;TODO: when translating this function, you should replace the filter-val with a proper for loop + if condition HERE
 (defn- outbound-groupings
   [^WorkerTopologyContext worker-context this-component-id stream-id out-fields component->grouping topo-conf]
   (->> component->grouping
@@ -174,13 +176,15 @@
                         TOPOLOGY-BOLTS-SLIDING-INTERVAL-DURATION-MS
                         TOPOLOGY-BOLTS-TUPLE-TIMESTAMP-FIELD-NAME
                         TOPOLOGY-BOLTS-TUPLE-TIMESTAMP-MAX-LAG-MS
+                        TOPOLOGY-BOLTS-MESSAGE-ID-FIELD-NAME
                         TOPOLOGY-STATE-PROVIDER
                         TOPOLOGY-STATE-PROVIDER-CONFIG
                         )
         spec-conf (-> general-context
                       (.getComponentCommon component-id)
                       .get_json_conf
-                      from-json)]
+                      (#(if % (JSONValue/parse %)))
+                      clojurify-structure)]
     (merge storm-conf (apply dissoc spec-conf to-remove))
     ))
 
@@ -194,20 +198,20 @@
   (let [storm-conf (:storm-conf executor)
         error-interval-secs (storm-conf TOPOLOGY-ERROR-THROTTLE-INTERVAL-SECS)
         max-per-interval (storm-conf TOPOLOGY-MAX-ERROR-REPORT-PER-INTERVAL)
-        interval-start-time (atom (current-time-secs))
+        interval-start-time (atom (Utils/currentTimeSecs))
         interval-errors (atom 0)
         ]
     (fn [error]
       (log-error error)
-      (when (> (time-delta @interval-start-time)
+      (when (> (Time/delta @interval-start-time)
                error-interval-secs)
         (reset! interval-errors 0)
-        (reset! interval-start-time (current-time-secs)))
+        (reset! interval-start-time (Utils/currentTimeSecs)))
       (swap! interval-errors inc)
 
       (when (<= @interval-errors max-per-interval)
         (cluster/report-error (:storm-cluster-state executor) (:storm-id executor) (:component-id executor)
-                              (hostname storm-conf)
+                              (Utils/hostname storm-conf)
                               (.getThisWorkerPort (:worker-context executor)) error)
         ))))
 
@@ -256,7 +260,7 @@
                                                           :context (ClusterStateContext. DaemonType/WORKER))
      :type executor-type
      ;; TODO: should refactor this to be part of the executor specific map (spout or bolt with :common field)
-     :stats (mk-executor-stats <> (sampling-rate storm-conf))
+     :stats (mk-executor-stats <> (ConfigUtils/samplingRate storm-conf))
      :interval->task->metric-registry (HashMap.)
      :task->component (:task->component worker)
      :stream->component->grouper (outbound-components worker-context component-id storm-conf)
@@ -264,8 +268,8 @@
      :report-error-and-die (fn [error]
                              ((:report-error <>) error)
                              (if (or
-                                    (exception-cause? InterruptedException error)
-                                    (exception-cause? java.io.InterruptedIOException error))
+                                   (Utils/exceptionCauseIsInstanceOf InterruptedException error)
+                                   (Utils/exceptionCauseIsInstanceOf java.io.InterruptedIOException error))
                                (log-message "Got interrupted excpetion shutting thread down...")
                                ((:suicide-fn <>))))
      :sampler (mk-stats-sampler storm-conf)
@@ -328,7 +332,7 @@
          task-id (:task-id task-data)
          name->imetric (-> interval->task->metric-registry (get interval) (get task-id))
          task-info (IMetricsConsumer$TaskInfo.
-                     (hostname (:storm-conf executor-data))
+                     (Utils/hostname (:storm-conf executor-data))
                      (.getThisWorkerPort worker-context)
                      (:component-id executor-data)
                      task-id
@@ -505,7 +509,7 @@
                  2 ;; microoptimize for performance of .size method
                  (reify RotatingMap$ExpiredCallback
                    (expire [this id [task-id spout-id tuple-info start-time-ms]]
-                     (let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
+                     (let [time-delta (if start-time-ms (Time/deltaMs start-time-ms))]
                        (fail-spout-msg executor-data (get task-datas task-id) spout-id tuple-info time-delta "TIMEOUT" id)
                        ))))
         tuple-action-fn (fn [task-id ^TupleImpl tuple]
@@ -523,7 +527,7 @@
                                 (when spout-id
                                   (when-not (= stored-task-id task-id)
                                     (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
-                                  (let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
+                                  (let [time-delta (if start-time-ms (Time/deltaMs start-time-ms))]
                                     (condp = stream-id
                                       ACKER-ACK-STREAM-ID (ack-spout-msg executor-data (get task-datas task-id)
                                                                          spout-id tuple-finished-info time-delta id)
@@ -667,12 +671,12 @@
 (defn- tuple-time-delta! [^TupleImpl tuple]
   (let [ms (.getProcessSampleStartTime tuple)]
     (if ms
-      (time-delta-ms ms))))
+      (Time/deltaMs ms))))
       
 (defn- tuple-execute-time-delta! [^TupleImpl tuple]
   (let [ms (.getExecuteSampleStartTime tuple)]
     (if ms
-      (time-delta-ms ms))))
+      (Time/deltaMs ms))))
 
 (defn put-xor! [^Map pending key id]
   (let [curr (or (.get pending key) (long 0))]

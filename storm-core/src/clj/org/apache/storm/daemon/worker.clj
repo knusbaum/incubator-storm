@@ -24,8 +24,10 @@
   (:require [org.apache.storm.messaging.loader :as msg-loader])
   (:import [java.util.concurrent Executors]
            [org.apache.storm.hooks IWorkerHook BaseWorkerHook])
-  (:import [java.util ArrayList HashMap])
-  (:import [org.apache.storm.utils Utils TransferDrainer ThriftTopologyUtils WorkerBackpressureThread DisruptorQueue])
+  (:import [java.util ArrayList HashMap]
+           [java.util.concurrent.locks ReentrantReadWriteLock])
+  (:import [org.apache.commons.io FileUtils])
+  (:import [org.apache.storm.utils Utils ConfigUtils TransferDrainer ThriftTopologyUtils WorkerBackpressureThread DisruptorQueue])
   (:import [org.apache.storm.grouping LoadMapping])
   (:import [org.apache.storm.messaging TransportFactory])
   (:import [org.apache.storm.messaging TaskMessage IContext IConnection ConnectionWithStatus ConnectionWithStatus$Status])
@@ -69,17 +71,19 @@
         zk-hb {:storm-id (:storm-id worker)
                :executor-stats stats
                :uptime ((:uptime worker))
-               :time-secs (current-time-secs)
+               :time-secs (Utils/currentTimeSecs)
                }]
     ;; do the zookeeper heartbeat
-    (.worker-heartbeat! (:storm-cluster-state worker) (:storm-id worker) (:assignment-id worker) (:port worker) zk-hb)
-    ))
+    (try
+      (.worker-heartbeat! (:storm-cluster-state worker) (:storm-id worker) (:assignment-id worker) (:port worker) zk-hb)
+      (catch Exception exc
+        (log-error exc "Worker failed to write heatbeats to ZK or Pacemaker...will retry")))))
 
 (defn do-heartbeat [worker]
   (let [conf (:conf worker)
-        state (worker-state conf (:worker-id worker))]
+        state (ConfigUtils/workerState conf (:worker-id worker))]
     ;; do the local-file-system heartbeat.
-    (ls-worker-heartbeat! state (current-time-secs) (:storm-id worker) (:executors worker) (:port worker))
+    (ls-worker-heartbeat! state (Utils/currentTimeSecs) (:storm-id worker) (:executors worker) (:port worker))
     (.cleanup state 60) ; this is just in case supervisor is down so that disk doesn't fill up.
                          ; it shouldn't take supervisor 120 seconds between listing dir and reading it
 
@@ -92,18 +96,19 @@
         components (mapcat
                      (fn [task-id]
                        (->> (.getComponentId context (int task-id))
-                            (.getTargets context)
-                            vals
-                            (map keys)
-                            (apply concat)))
+                         (.getTargets context)
+                         vals
+                         (map keys)
+                         (apply concat)))
                      (:task-ids worker))]
     (-> worker
-        :task->component
-        reverse-map
-        (select-keys components)
-        vals
-        flatten
-        set )))
+      :task->component
+      (Utils/reverseMap)
+      clojurify-structure
+      (select-keys components)
+      vals
+      flatten
+      set )))
 
 (defn get-dest
   [^AddressedTuple addressed-tuple]
@@ -235,7 +240,7 @@
 (defn mk-halting-timer [timer-name]
   (mk-timer :kill-fn (fn [t]
                        (log-error t "Error when processing event")
-                       (exit-process! 20 "Error when processing an event")
+                       (Utils/exitProcess 20 "Error when processing an event")
                        )
             :timer-name timer-name))
 
@@ -252,68 +257,69 @@
                                (mapcat (fn [[e queue]] (for [t (executor-id->tasks e)] [t queue])))
                                (into {}))
 
-        topology (read-supervisor-topology conf storm-id)
+        topology (ConfigUtils/readSupervisorTopology conf storm-id)
         mq-context  (if mq-context
                       mq-context
                       (TransportFactory/makeContext storm-conf))]
     
     (recursive-map
-     :conf conf
-     :mq-context mq-context
-     :receiver (.bind ^IContext mq-context storm-id port)
-     :storm-id storm-id
-     :assignment-id assignment-id
-     :port port
-     :worker-id worker-id
-     :cluster-state cluster-state
-     :storm-cluster-state storm-cluster-state
-     ;; when worker bootup, worker will start to setup initial connections to
-     ;; other workers. When all connection is ready, we will enable this flag
-     ;; and spout and bolt will be activated.
-     :worker-active-flag (atom false)
-     :storm-active-atom (atom false)
-     :storm-component->debug-atom (atom {})
-     :executors executors
-     :task-ids (->> receive-queue-map keys (map int) sort)
-     :storm-conf storm-conf
-     :topology topology
-     :system-topology (system-topology! storm-conf topology)
-     :heartbeat-timer (mk-halting-timer "heartbeat-timer")
-     :refresh-load-timer (mk-halting-timer "refresh-load-timer")
-     :refresh-connections-timer (mk-halting-timer "refresh-connections-timer")
-     :refresh-credentials-timer (mk-halting-timer "refresh-credentials-timer")
-     :reset-log-levels-timer (mk-halting-timer "reset-log-levels-timer")
-     :refresh-active-timer (mk-halting-timer "refresh-active-timer")
-     :executor-heartbeat-timer (mk-halting-timer "executor-heartbeat-timer")
-     :user-timer (mk-halting-timer "user-timer")
-     :task->component (HashMap. (storm-task-info topology storm-conf)) ; for optimized access when used in tasks later on
-     :component->stream->fields (component->stream->fields (:system-topology <>))
-     :component->sorted-tasks (->> (:task->component <>) reverse-map (map-val sort))
-     :endpoint-socket-lock (mk-rw-lock)
-     :cached-node+port->socket (atom {})
-     :cached-task->node+port (atom {})
-     :transfer-queue transfer-queue
-     :executor-receive-queue-map executor-receive-queue-map
-     :short-executor-receive-queue-map (map-key first executor-receive-queue-map)
-     :task->short-executor (->> executors
-                                (mapcat (fn [e] (for [t (executor-id->tasks e)] [t (first e)])))
-                                (into {})
-                                (HashMap.))
-     :suicide-fn (mk-suicide-fn conf)
-     :uptime (uptime-computer)
-     :default-shared-resources (mk-default-resources <>)
-     :user-shared-resources (mk-user-resources <>)
-     :transfer-local-fn (mk-transfer-local-fn <>)
-     :transfer-fn (mk-transfer-fn <>)
-     :load-mapping (LoadMapping.)
-     :assignment-versions assignment-versions
-     :backpressure (atom false) ;; whether this worker is going slow
-     :transfer-backpressure (atom false) ;; if the transfer queue is backed-up
-     :backpressure-trigger (atom false) ;; a trigger for synchronization with executors
-     :throttle-on (atom false) ;; whether throttle is activated for spouts
-     )))
-                
-    
+      :conf conf
+      :mq-context mq-context
+      :receiver (.bind ^IContext mq-context storm-id port)
+      :storm-id storm-id
+      :assignment-id assignment-id
+      :port port
+      :worker-id worker-id
+      :cluster-state cluster-state
+      :storm-cluster-state storm-cluster-state
+      ;; when worker bootup, worker will start to setup initial connections to
+      ;; other workers. When all connection is ready, we will enable this flag
+      ;; and spout and bolt will be activated.
+      :worker-active-flag (atom false)
+      :storm-active-atom (atom false)
+      :storm-component->debug-atom (atom {})
+      :executors executors
+      :task-ids (->> receive-queue-map keys (map int) sort)
+      :storm-conf storm-conf
+      :topology topology
+      :system-topology (system-topology! storm-conf topology)
+      :heartbeat-timer (mk-halting-timer "heartbeat-timer")
+      :refresh-load-timer (mk-halting-timer "refresh-load-timer")
+      :refresh-connections-timer (mk-halting-timer "refresh-connections-timer")
+      :refresh-credentials-timer (mk-halting-timer "refresh-credentials-timer")
+      :reset-log-levels-timer (mk-halting-timer "reset-log-levels-timer")
+      :refresh-active-timer (mk-halting-timer "refresh-active-timer")
+      :executor-heartbeat-timer (mk-halting-timer "executor-heartbeat-timer")
+      :user-timer (mk-halting-timer "user-timer")
+      :task->component (HashMap. (storm-task-info topology storm-conf)) ; for optimized access when used in tasks later on
+      :component->stream->fields (component->stream->fields (:system-topology <>))
+      ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
+      :component->sorted-tasks (->> (:task->component <>) (Utils/reverseMap) (clojurify-structure) (map-val sort))
+      :endpoint-socket-lock (ReentrantReadWriteLock.)
+      :cached-node+port->socket (atom {})
+      :cached-task->node+port (atom {})
+      :transfer-queue transfer-queue
+      :executor-receive-queue-map executor-receive-queue-map
+      ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
+      :short-executor-receive-queue-map (map-key first executor-receive-queue-map)
+      :task->short-executor (->> executors
+                                 (mapcat (fn [e] (for [t (executor-id->tasks e)] [t (first e)])))
+                                 (into {})
+                                 (HashMap.))
+      :suicide-fn (mk-suicide-fn conf)
+      :uptime (uptime-computer)
+      :default-shared-resources (mk-default-resources <>)
+      :user-shared-resources (mk-user-resources <>)
+      :transfer-local-fn (mk-transfer-local-fn <>)
+      :transfer-fn (mk-transfer-fn <>)
+      :load-mapping (LoadMapping.)
+      :assignment-versions assignment-versions
+      :backpressure (atom false) ;; whether this worker is going slow
+      :transfer-backpressure (atom false) ;; if the transfer queue is backed-up
+      :backpressure-trigger (atom false) ;; a trigger for synchronization with executors
+      :throttle-on (atom false) ;; whether throttle is activated for spouts
+      )))
+
 (defn- endpoint->string [[node port]]
   (str port "/" node))
 
@@ -324,6 +330,7 @@
 
 (def LOAD-REFRESH-INTERVAL-MS 5000)
 
+;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defn mk-refresh-load [worker]
   (let [local-tasks (set (:task-ids worker))
         remote-tasks (set/difference (worker-outbound-tasks worker) local-tasks)
@@ -344,6 +351,23 @@
             (.sendLoadMetrics (:receiver worker) local-pop)
             (reset! next-update (+ LOAD-REFRESH-INTERVAL-MS now))))))))
 
+(defmacro read-locked
+  [rw-lock & body]
+  (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
+    `(let [rlock# (.readLock ~lock)]
+       (try (.lock rlock#)
+         ~@body
+         (finally (.unlock rlock#))))))
+
+(defmacro write-locked
+  [rw-lock & body]
+  (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
+    `(let [wlock# (.writeLock ~lock)]
+       (try (.lock wlock#)
+         ~@body
+         (finally (.unlock wlock#))))))
+
+;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defn mk-refresh-connections [worker]
   (let [outbound-tasks (worker-outbound-tasks worker)
         conf (:conf worker)
@@ -363,8 +387,10 @@
                                 :executor->node+port
                                 to-task->node+port
                                 (select-keys outbound-tasks)
+                                ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
                                 (#(map-val endpoint->string %)))
               ;; we dont need a connection for the local tasks anymore
+               ;TODO: when translating this function, you should replace the filter-val with a proper for loop + if condition HERE
               needed-assignment (->> my-assignment
                                       (filter-key (complement (-> worker :task-ids set))))
               needed-connections (-> needed-assignment vals set)
@@ -576,14 +602,14 @@
 (defserverfn mk-worker [conf shared-mq-context storm-id assignment-id port worker-id]
   (log-message "Launching worker for " storm-id " on " assignment-id ":" port " with id " worker-id
                " and conf " conf)
-  (if-not (local-mode? conf)
+  (if-not (ConfigUtils/isLocalMode conf)
     (redirect-stdio-to-slf4j!))
   ;; because in local mode, its not a separate
   ;; process. supervisor will register it in this case
-  (when (= :distributed (cluster-mode conf))
-    (let [pid (process-pid)]
-      (touch (worker-pid-path conf worker-id pid))
-      (spit (worker-artifacts-pid-path conf storm-id port) pid)))
+  (when (= :distributed (ConfigUtils/clusterMode conf))
+    (let [pid (Utils/processPid)]
+      (FileUtils/touch (ConfigUtils/workerPidPath conf worker-id pid))
+      (spit (ConfigUtils/workerArtifactsPidPath conf storm-id port) pid)))
 
   (declare establish-log-setting-callback)
 
@@ -591,8 +617,8 @@
   (def latest-log-config (atom {}))
   (def original-log-levels (atom {}))
 
-  (let [storm-conf (read-supervisor-storm-conf conf storm-id)
-        storm-conf (override-login-config-with-system-property storm-conf)
+  (let [storm-conf (ConfigUtils/readSupervisorStormConf conf storm-id)
+        storm-conf (clojurify-structure (ConfigUtils/overrideLoginConfigWithSystemProperty storm-conf))
         acls (Utils/getWorkerACL storm-conf)
         cluster-state (cluster/mk-distributed-cluster-state conf :auth-conf storm-conf :acls acls :context (ClusterStateContext. DaemonType/WORKER))
         storm-cluster-state (cluster/mk-storm-cluster-state cluster-state :acls acls)
@@ -750,15 +776,15 @@
 
 (defmethod mk-suicide-fn
   :local [conf]
-  (fn [] (exit-process! 1 "Worker died")))
+  (fn [] (Utils/exitProcess 1 "Worker died")))
 
 (defmethod mk-suicide-fn
   :distributed [conf]
-  (fn [] (exit-process! 1 "Worker died")))
+  (fn [] (Utils/exitProcess 1 "Worker died")))
 
 (defn -main [storm-id assignment-id port-str worker-id]
-  (let [conf (read-storm-config)]
+  (let [conf (clojurify-structure (ConfigUtils/readStormConfig))]
     (setup-default-uncaught-exception-handler)
     (validate-distributed-mode! conf)
     (let [worker (mk-worker conf nil storm-id assignment-id (Integer/parseInt port-str) worker-id)]
-      (add-shutdown-hook-with-force-kill-in-1-sec #(.shutdown worker)))))
+      (Utils/addShutdownHookWithForceKillIn1Sec #(.shutdown worker)))))

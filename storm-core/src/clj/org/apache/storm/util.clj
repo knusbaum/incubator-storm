@@ -48,21 +48,21 @@
   (:require [ring.util.codec :as codec])
   (:use [org.apache.storm log]))
 
-(defn wrap-in-runtime
-  "Wraps an exception in a RuntimeException if needed"
-  [^Exception e]
-  (if (instance? RuntimeException e)
-    e
-    (RuntimeException. e)))
+;(defn wrap-in-runtime
+;  "Wraps an exception in a RuntimeException if needed"
+;  [^Exception e]
+;  (if (instance? RuntimeException e)
+;    e
+;    (RuntimeException. e)))
 
 (def on-windows?
   (= "Windows_NT" (System/getenv "OS")))
 
-(def file-path-separator
-  (System/getProperty "file.separator"))
+;(def file-path-separator
+;  (System/getProperty "file.separator"))
 
-(def class-path-separator
-  (System/getProperty "path.separator"))
+;(def class-path-separator
+;  (System/getProperty "path.separator"))
 
 (defn is-absolute-path? [path]
   (.isAbsolute (Paths/get path (into-array String []))))
@@ -178,7 +178,7 @@
      ~@body
      false
      (catch Throwable t#
-       (exception-cause? ~klass t#))))
+       (Utils/exceptionCauseIsInstanceOf ~klass t#))))
 
 (defmacro thrown-cause-with-msg?
   [klass re & body]
@@ -203,7 +203,7 @@
         [code guards] (split-with checker body)
         error-local (gensym "t")
         guards (forcat [[_ klass local & guard-body] guards]
-                       `((exception-cause? ~klass ~error-local)
+                       `((Utils/exceptionCauseIsInstanceOf ~klass ~error-local)
                          (let [~local ~error-local]
                            ~@guard-body
                            )))]
@@ -213,17 +213,17 @@
                true (throw ~error-local)
                )))))
 
-(defn local-hostname
-  []
-  (.getCanonicalHostName (InetAddress/getLocalHost)))
-
-(def memoized-local-hostname (memoize local-hostname))
+;(defn local-hostname
+;  []
+;  (.getCanonicalHostName (InetAddress/getLocalHost)))
+;
+;(def memoized-local-hostname (memoize local-hostname))
 
 ;; checks conf for STORM_LOCAL_HOSTNAME.
 ;; when unconfigured, falls back to (memoized) guess by `local-hostname`.
-(defn hostname
-  [conf]
-  (conf Config/STORM_LOCAL_HOSTNAME (memoized-local-hostname)))
+;(defn hostname
+;  [conf]
+;  (conf Config/STORM_LOCAL_HOSTNAME (memoized-local-hostname)))
 
 (letfn [(try-port [port]
                   (with-open [socket (java.net.ServerSocket. port)]
@@ -236,20 +236,20 @@
        (catch java.io.IOException e
          (available-port))))))
 
-(defn uuid []
-  (str (UUID/randomUUID)))
+;(defn uuid []
+;  (str (UUID/randomUUID)))
 
-(defn current-time-secs
-  []
-  (Time/currentTimeSecs))
+;(defn current-time-secs
+;  []
+;  (Time/currentTimeSecs))
 
-(defn current-time-millis
-  []
-  (Time/currentTimeMillis))
+;(defn current-time-millis
+;  []
+;  (Time/currentTimeMillis))
 
-(defn secs-to-millis-long
-  [secs]
-  (long (* (long 1000) secs)))
+;(defn secs-to-millis-long
+;  [secs]
+;  (long (* (long 1000) secs)))
 
 (defn clojurify-structure
   [s]
@@ -274,193 +274,194 @@
          (.release lock#)
          (.close rf#)))))
 
-(defn tokenize-path
-  [^String path]
-  (let [toks (.split path "/")]
-    (vec (filter (complement empty?) toks))))
+;(defn tokenize-path
+;  [^String path]
+;  (let [toks (.split path "/")]
+;    (vec (filter (complement empty?) toks))))
 
-(defn assoc-conj
-  [m k v]
-  (merge-with concat m {k [v]}))
+;(defn assoc-conj
+;  [m k v]
+;  (merge-with concat m {k [v]}))
 
 ;; returns [ones in first set not in second, ones in second set not in first]
-(defn set-delta
-  [old curr]
-  (let [s1 (set old)
-        s2 (set curr)]
-    [(set/difference s1 s2) (set/difference s2 s1)]))
+;(defn set-delta
+;  [old curr]
+;  (let [s1 (set old)
+;        s2 (set curr)]
+;    [(set/difference s1 s2) (set/difference s2 s1)]))
 
-(defn parent-path
-  [path]
-  (let [toks (tokenize-path path)]
-    (str "/" (str/join "/" (butlast toks)))))
+;(defn parent-path
+;  [path]
+;  (let [toks (Utils/tokenizePath path)]
+;    (str "/" (str/join "/" (butlast toks)))))
 
-(defn toks->path
-  [toks]
-  (str "/" (str/join "/" toks)))
+;(defn toks->path
+;  [toks]
+;  (str "/" (str/join "/" toks)))
 
-(defn normalize-path
-  [^String path]
-  (toks->path (tokenize-path path)))
+;(defn normalize-path
+;  [^String path]
+;  (Utils/toksToPath (Utils/tokenizePath path)))
 
+;TODO: We're keeping this function around until all the code using it is properly tranlated to java
+;TODO: by properly having the for loop IN THE JAVA FUNCTION that originally used this function.
 (defn map-val
   [afn amap]
   (into {}
         (for [[k v] amap]
           [k (afn v)])))
 
+;TODO: We're keeping this function around until all the code using it is properly tranlated to java
+;TODO: by properly having the for loop IN THE JAVA FUNCTION that originally used this function.
 (defn filter-val
   [afn amap]
   (into {} (filter (fn [[k v]] (afn v)) amap)))
 
+;TODO: We're keeping this function around until all the code using it is properly tranlated to java
+;TODO: by properly having the for loop IN THE JAVA FUNCTION that originally used this function.
 (defn filter-key
   [afn amap]
   (into {} (filter (fn [[k v]] (afn k)) amap)))
 
+;TODO: We're keeping this function around until all the code using it is properly tranlated to java
+;TODO: by properly having the for loop IN THE JAVA FUNCTION that originally used this function.
 (defn map-key
   [afn amap]
   (into {} (for [[k v] amap] [(afn k) v])))
 
-(defn separate
-  [pred aseq]
-  [(filter pred aseq) (filter (complement pred) aseq)])
+;(defn full-path
+;  [parent name]
+;  (let [toks (Utils/tokenizePath parent)]
+;    (Utils/toksToPath (conj toks name))))
 
-(defn full-path
-  [parent name]
-  (let [toks (tokenize-path parent)]
-    (toks->path (conj toks name))))
-
+;TODO: Once all the other clojure functions (100+ locations) are translated to java, this function becomes moot.
 (def not-nil? (complement nil?))
 
-(defn barr
-  [& vals]
-  (byte-array (map byte vals)))
+;(defn exit-process!
+;  [val & msg]
+;  (log-error (RuntimeException. (str msg)) "Halting process: " msg)
+;  (.exit (Runtime/getRuntime) val))
 
-(defn exit-process!
-  [val & msg]
-  (log-error (RuntimeException. (str msg)) "Halting process: " msg)
-  (.exit (Runtime/getRuntime) val))
+;(defn sum
+;  [vals]
+;  (reduce + vals))
 
-(defn sum
-  [vals]
-  (reduce + vals))
+;(defn repeat-seq
+;  ([aseq]
+;   (apply concat (repeat aseq)))
+;  ([amt aseq]
+;   (apply concat (repeat amt aseq))))
 
-(defn repeat-seq
-  ([aseq]
-   (apply concat (repeat aseq)))
-  ([amt aseq]
-   (apply concat (repeat amt aseq))))
+;(defn div
+;  "Perform floating point division on the arguments."
+;  [f & rest]
+;  (apply / (double f) rest))
 
-(defn div
-  "Perform floating point division on the arguments."
-  [f & rest]
-  (apply / (double f) rest))
+;(defn defaulted
+;  [val default]
+;  (if val val default))
 
-(defn defaulted
-  [val default]
-  (if val val default))
+;(defn mk-counter
+;  ([] (mk-counter 1))
+;  ([start-val]
+;   (let [val (atom (dec start-val))]
+;     (fn [] (swap! val inc)))))
 
-(defn mk-counter
-  ([] (mk-counter 1))
-  ([start-val]
-   (let [val (atom (dec start-val))]
-     (fn [] (swap! val inc)))))
-
-(defmacro for-times [times & body]
-  `(for [i# (range ~times)]
-     ~@body))
+;(defmacro for-times [times & body]
+;  `(for [i# (range ~times)]
+;     ~@body))
 
 (defmacro dofor [& body]
   `(doall (for ~@body)))
 
-(defn reverse-map
-  "{:a 1 :b 1 :c 2} -> {1 [:a :b] 2 :c}"
-  [amap]
-  (reduce (fn [m [k v]]
-            (let [existing (get m v [])]
-              (assoc m v (conj existing k))))
-          {} amap))
+;(defn reverse-map
+;  "{:a 1 :b 1 :c 2} -> {1 [:a :b] 2 :c}"
+;  [amap]
+;  (reduce (fn [m [k v]]
+;            (let [existing (get m v [])]
+;              (assoc m v (conj existing k))))
+;          {} amap))
 
 (defmacro print-vars [& vars]
   (let [prints (for [v vars] `(println ~(str v) ~v))]
     `(do ~@prints)))
 
-(defn process-pid
-  "Gets the pid of this JVM. Hacky because Java doesn't provide a real way to do this."
-  []
-  (let [name (.getName (ManagementFactory/getRuntimeMXBean))
-        split (.split name "@")]
-    (when-not (= 2 (count split))
-      (throw (RuntimeException. (str "Got unexpected process name: " name))))
-    (first split)))
+;(defn process-pid
+;  "Gets the pid of this JVM. Hacky because Java doesn't provide a real way to do this."
+;  []
+;  (let [name (.getName (ManagementFactory/getRuntimeMXBean))
+;        split (.split name "@")]
+;    (when-not (= 2 (count split))
+;      (throw (RuntimeException. (str "Got unexpected process name: " name))))
+;    (first split)))
 
-(defn exec-command! [command]
-  (let [[comm-str & args] (seq (.split command " "))
-        command (CommandLine. comm-str)]
-    (doseq [a args]
-      (.addArgument command a))
-    (.execute (DefaultExecutor.) command)))
+;(defn exec-command! [command]
+;  (let [[comm-str & args] (seq (.split command " "))
+;        command (CommandLine. comm-str)]
+;    (doseq [a args]
+;      (.addArgument command a))
+;    (.execute (DefaultExecutor.) command)))
 
-(defn extract-dir-from-jar [jarpath dir destdir]
-  (try-cause
-    (with-open [jarpath (ZipFile. jarpath)]
-      (let [entries (enumeration-seq (.entries jarpath))]
-        (doseq [file (filter (fn [entry](and (not (.isDirectory entry)) (.startsWith (.getName entry) dir))) entries)]
-          (.mkdirs (.getParentFile (File. destdir (.getName file))))
-          (with-open [out (FileOutputStream. (File. destdir (.getName file)))]
-            (io/copy (.getInputStream jarpath file) out)))))
-    (catch IOException e
-      (log-message "Could not extract " dir " from " jarpath))))
+;(defn extract-dir-from-jar [jarpath dir destdir]
+;  (try-cause
+;    (with-open [jarpath (ZipFile. jarpath)]
+;      (let [entries (enumeration-seq (.entries jarpath))]
+;        (doseq [file (filter (fn [entry](and (not (.isDirectory entry)) (.startsWith (.getName entry) dir))) entries)]
+;          (.mkdirs (.getParentFile (File. destdir (.getName file))))
+;          (with-open [out (FileOutputStream. (File. destdir (.getName file)))]
+;            (io/copy (.getInputStream jarpath file) out)))))
+;    (catch IOException e
+;      (log-message "Could not extract " dir " from " jarpath))))
 
-(defn sleep-secs [secs]
-  (when (pos? secs)
-    (Time/sleep (* (long secs) 1000))))
+;(defn sleep-secs [secs]
+;  (when (pos? secs)
+;    (Time/sleep (* (long secs) 1000))))
 
-(defn sleep-until-secs [target-secs]
-  (Time/sleepUntil (* (long target-secs) 1000)))
+;(defn sleep-until-secs [target-secs]
+;  (Time/sleepUntil (* (long target-secs) 1000)))
 
-(def ^:const sig-kill 9)
+;(def ^:const sig-kill 9)
+;
+;(def ^:const sig-term 15)
 
-(def ^:const sig-term 15)
+;(defn send-signal-to-process
+;  [pid signum]
+;  (try-cause
+;    (Utils/execCommand (str (if on-windows?
+;                          (if (== signum sig-kill) "taskkill /f /pid " "taskkill /pid ")
+;                          (str "kill -" signum " "))
+;                     pid))
+;    (catch ExecuteException e
+;      (log-message "Error when trying to kill " pid ". Process is probably already dead."))))
 
-(defn send-signal-to-process
-  [pid signum]
-  (try-cause
-    (exec-command! (str (if on-windows?
-                          (if (== signum sig-kill) "taskkill /f /pid " "taskkill /pid ")
-                          (str "kill -" signum " "))
-                     pid))
-    (catch ExecuteException e
-      (log-message "Error when trying to kill " pid ". Process is probably already dead."))))
+;(defn read-and-log-stream
+;  [prefix stream]
+;  (try
+;    (let [reader (BufferedReader. (InputStreamReader. stream))]
+;      (loop []
+;        (if-let [line (.readLine reader)]
+;                (do
+;                  (log-warn (str prefix ":" line))
+;                  (recur)))))
+;    (catch IOException e
+;      (log-warn "Error while trying to log stream" e))))
 
-(defn read-and-log-stream
-  [prefix stream]
-  (try
-    (let [reader (BufferedReader. (InputStreamReader. stream))]
-      (loop []
-        (if-let [line (.readLine reader)]
-                (do
-                  (log-warn (str prefix ":" line))
-                  (recur)))))
-    (catch IOException e
-      (log-warn "Error while trying to log stream" e))))
+;(defn force-kill-process
+;  [pid]
+;  (send-signal-to-process pid sig-kill))
 
-(defn force-kill-process
-  [pid]
-  (send-signal-to-process pid sig-kill))
+;(defn kill-process-with-sig-term
+;  [pid]
+;  (send-signal-to-process pid sig-term))
 
-(defn kill-process-with-sig-term
-  [pid]
-  (send-signal-to-process pid sig-term))
-
-(defn add-shutdown-hook-with-force-kill-in-1-sec
-  "adds the user supplied function as a shutdown hook for cleanup.
-   Also adds a function that sleeps for a second and then sends kill -9 to process to avoid any zombie process in case
-   cleanup function hangs."
-  [func]
-  (.addShutdownHook (Runtime/getRuntime) (Thread. #(func)))
-  (.addShutdownHook (Runtime/getRuntime) (Thread. #((sleep-secs 1)
-                                                    (.halt (Runtime/getRuntime) 20)))))
+;(defn add-shutdown-hook-with-force-kill-in-1-sec
+;  "adds the user supplied function as a shutdown hook for cleanup.
+;   Also adds a function that sleeps for a second and then sends kill -9 to process to avoid any zombie process in case
+;   cleanup function hangs."
+;  [func]
+;  (.addShutdownHook (Runtime/getRuntime) (Thread. #(func)))
+;  (.addShutdownHook (Runtime/getRuntime) (Thread. #((Time/sleepSecs 1)
+;                                                    (.halt (Runtime/getRuntime) 20)))))
 
 (defprotocol SmartThread
   (start [this])
@@ -471,7 +472,7 @@
 ;; afn returns amount of time to sleep
 (defnk async-loop [afn
                    :daemon false
-                   :kill-fn (fn [error] (exit-process! 1 "Async loop died!"))
+                   :kill-fn (fn [error] (Utils/exitProcess 1 "Async loop died!"))
                    :priority Thread/NORM_PRIORITY
                    :factory? false
                    :start true
@@ -483,7 +484,7 @@
                        (loop []
                          (let [sleep-time (afn)]
                            (when-not (nil? sleep-time)
-                             (sleep-secs sleep-time)
+                             (Time/sleepSecs sleep-time)
                              (recur))
                            )))
                      (catch InterruptedException e
@@ -513,22 +514,22 @@
         [this]
         (Time/isThreadWaiting thread)))))
 
-(defn shell-cmd
-  [command]
-  (->> command
-    (map #(str \' (clojure.string/escape % {\' "'\"'\"'"}) \'))
-      (clojure.string/join " ")))
+;(defn shell-cmd
+;  [command]
+;  (->> command
+;    (map #(str \' (clojure.string/escape % {\' "'\"'\"'"}) \'))
+;      (clojure.string/join " ")))
 
-(defn script-file-path [dir]
-  (str dir file-path-separator "storm-worker-script.sh"))
+;(defn script-file-path [dir]
+;  (str dir Utils/filePathSeparator "storm-worker-script.sh"))
 
-(defn container-file-path [dir]
-  (str dir file-path-separator "launch_container.sh"))
+;(defn container-file-path [dir]
+;  (str dir Utils/filePathSeparator "launch_container.sh"))
 
 (defnk write-script
   [dir command :environment {}]
-  (let [script-src (str "#!/bin/bash\n" (clojure.string/join "" (map (fn [[k v]] (str (shell-cmd ["export" (str k "=" v)]) ";\n")) environment)) "\nexec " (shell-cmd command) ";")
-        script-path (script-file-path dir)
+  (let [script-src (str "#!/bin/bash\n" (clojure.string/join "" (map (fn [[k v]] (str (Utils/shellCmd ["export" (str k "=" v)]) ";\n")) environment)) "\nexec " (Utils/shellCmd command) ";")
+        script-path (Utils/scriptFilePath dir)
         _ (spit script-path script-src)]
     script-path
   ))
@@ -546,7 +547,7 @@
         (async-loop
          (fn []
            (if log-prefix
-             (read-and-log-stream log-prefix (.getInputStream process)))
+             (Utils/readAndLogStream log-prefix (.getInputStream process)))
            (when exit-code-callback
              (try
                (.waitFor process)
@@ -556,198 +557,198 @@
            nil)))                    
       process)))
    
-(defn exists-file?
-  [path]
-  (.exists (File. path)))
-
-(defn rmr
-  [path]
-  (log-debug "Rmr path " path)
-  (when (exists-file? path)
-    (try
-      (FileUtils/forceDelete (File. path))
-      (catch FileNotFoundException e))))
-
-(defn rmpath
-  "Removes file or directory at the path. Not recursive. Throws exception on failure"
-  [path]
-  (log-debug "Removing path " path)
-  (when (exists-file? path)
-    (let [deleted? (.delete (File. path))]
-      (when-not deleted?
-        (throw (RuntimeException. (str "Failed to delete " path)))))))
-
-(defn local-mkdirs
-  [path]
-  (log-debug "Making dirs at " path)
-  (FileUtils/forceMkdir (File. path)))
-
-(defn touch
-  [path]
-  (log-debug "Touching file at " path)
-  (let [success? (do (if on-windows? (.mkdirs (.getParentFile (File. path))))
-                   (.createNewFile (File. path)))]
-    (when-not success?
-      (throw (RuntimeException. (str "Failed to touch " path))))))
-
-(defn create-symlink!
-  "Create symlink is to the target"
-  ([path-dir target-dir file-name]
-    (create-symlink! path-dir target-dir file-name file-name))
-  ([path-dir target-dir from-file-name to-file-name]
-    (let [path (str path-dir file-path-separator from-file-name)
-          target (str target-dir file-path-separator to-file-name)
-          empty-array (make-array String 0)
-          attrs (make-array FileAttribute 0)
-          abs-path (.toAbsolutePath (Paths/get path empty-array))
-          abs-target (.toAbsolutePath (Paths/get target empty-array))]
-      (log-debug "Creating symlink [" abs-path "] to [" abs-target "]")
-      (if (not (.exists (.toFile abs-path)))
-        (Files/createSymbolicLink abs-path abs-target attrs)))))
-
-(defn read-dir-contents
-  [dir]
-  (if (exists-file? dir)
-    (let [content-files (.listFiles (File. dir))]
-      (map #(.getName ^File %) content-files))
-    []))
-
-(defn compact
-  [aseq]
-  (filter (complement nil?) aseq))
-
-(defn current-classpath
-  []
-  (System/getProperty "java.class.path"))
-
-(defn get-full-jars
-  [dir]
-  (map #(str dir file-path-separator %) (filter #(.endsWith % ".jar") (read-dir-contents dir))))
-
-(defn worker-classpath
-  []
-  (let [storm-dir (System/getProperty "storm.home")
-        storm-lib-dir (str storm-dir file-path-separator "lib")
-        storm-conf-dir (if-let [confdir (System/getenv "STORM_CONF_DIR")]
-                         confdir 
-                         (str storm-dir file-path-separator "conf"))
-        storm-extlib-dir (str storm-dir file-path-separator "extlib")
-        extcp (System/getenv "STORM_EXT_CLASSPATH")]
-    (if (nil? storm-dir) 
-      (current-classpath)
-      (str/join class-path-separator
-                (remove nil? (concat (get-full-jars storm-lib-dir) (get-full-jars storm-extlib-dir) [extcp] [storm-conf-dir]))))))
-
-(defn add-to-classpath
-  [classpath paths]
-  (if (empty? paths)
-    classpath
-    (str/join class-path-separator (cons classpath paths))))
-
-(defn ^ReentrantReadWriteLock mk-rw-lock
-  []
-  (ReentrantReadWriteLock.))
-
-(defmacro read-locked
-  [rw-lock & body]
-  (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
-    `(let [rlock# (.readLock ~lock)]
-       (try (.lock rlock#)
-         ~@body
-         (finally (.unlock rlock#))))))
-
-(defmacro write-locked
-  [rw-lock & body]
-  (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
-    `(let [wlock# (.writeLock ~lock)]
-       (try (.lock wlock#)
-         ~@body
-         (finally (.unlock wlock#))))))
-
-(defn time-delta
-  [time-secs]
-  (- (current-time-secs) time-secs))
-
-(defn time-delta-ms
-  [time-ms]
-  (- (System/currentTimeMillis) (long time-ms)))
-
-(defn parse-int
-  [str]
-  (Integer/valueOf str))
-
-(defn integer-divided
-  [sum num-pieces]
-  (clojurify-structure (Utils/integerDivided sum num-pieces)))
-
-(defn collectify
-  [obj]
-  (if (or (sequential? obj) (instance? Collection obj))
-    obj
-    [obj]))
-
-(defn to-json
-  [obj]
-  (JSONValue/toJSONString obj))
-
-(defn from-json
-  [^String str]
-  (if str
-    (clojurify-structure
-      (JSONValue/parse str))
-    nil))
-
-(defmacro letlocals
-  [& body]
-  (let [[tobind lexpr] (split-at (dec (count body)) body)
-        binded (vec (mapcat (fn [e]
-                              (if (and (list? e) (= 'bind (first e)))
-                                [(second e) (last e)]
-                                ['_ e]
-                                ))
-                            tobind))]
-    `(let ~binded
-       ~(first lexpr))))
-
-(defn remove-first
-  [pred aseq]
-  (let [[b e] (split-with (complement pred) aseq)]
-    (when (empty? e)
-      (throw (IllegalArgumentException. "Nothing to remove")))
-    (concat b (rest e))))
-
-(defn assoc-non-nil
-  [m k v]
-  (if v (assoc m k v) m))
-
-(defn multi-set
-  "Returns a map of elem to count"
-  [aseq]
-  (apply merge-with +
-         (map #(hash-map % 1) aseq)))
-
-(defn set-var-root*
-  [avar val]
-  (alter-var-root avar (fn [avar] val)))
-
-(defmacro set-var-root
-  [var-sym val]
-  `(set-var-root* (var ~var-sym) ~val))
-
-(defmacro with-var-roots
-  [bindings & body]
-  (let [settings (partition 2 bindings)
-        tmpvars (repeatedly (count settings) (partial gensym "old"))
-        vars (map first settings)
-        savevals (vec (mapcat (fn [t v] [t v]) tmpvars vars))
-        setters (for [[v s] settings] `(set-var-root ~v ~s))
-        restorers (map (fn [v s] `(set-var-root ~v ~s)) vars tmpvars)]
-    `(let ~savevals
-       ~@setters
-       (try
-         ~@body
-         (finally
-           ~@restorers)))))
+;; (defn exists-file?
+;;   [path]
+;;   (.exists (File. path)))
+;; 
+;; (defn rmr
+;;   [path]
+;;   (log-debug "Rmr path " path)
+;;   (when (exists-file? path)
+;;     (try
+;;       (FileUtils/forceDelete (File. path))
+;;       (catch FileNotFoundException e))))
+;; 
+;; (defn rmpath
+;;   "Removes file or directory at the path. Not recursive. Throws exception on failure"
+;;   [path]
+;;   (log-debug "Removing path " path)
+;;   (when (exists-file? path)
+;;     (let [deleted? (.delete (File. path))]
+;;       (when-not deleted?
+;;         (throw (RuntimeException. (str "Failed to delete " path)))))))
+;; 
+;; (defn local-mkdirs
+;;   [path]
+;;   (log-debug "Making dirs at " path)
+;;   (FileUtils/forceMkdir (File. path)))
+;; 
+;; (defn touch
+;;   [path]
+;;   (log-debug "Touching file at " path)
+;;   (let [success? (do (if on-windows? (.mkdirs (.getParentFile (File. path))))
+;;                    (.createNewFile (File. path)))]
+;;     (when-not success?
+;;       (throw (RuntimeException. (str "Failed to touch " path))))))
+;; 
+;; (defn create-symlink!
+;;   "Create symlink is to the target"
+;;   ([path-dir target-dir file-name]
+;;     (create-symlink! path-dir target-dir file-name file-name))
+;;   ([path-dir target-dir from-file-name to-file-name]
+;;     (let [path (str path-dir Utils/filePathSeparator from-file-name)
+;;           target (str target-dir Utils/filePathSeparator to-file-name)
+;;           empty-array (make-array String 0)
+;;           attrs (make-array FileAttribute 0)
+;;           abs-path (.toAbsolutePath (Paths/get path empty-array))
+;;           abs-target (.toAbsolutePath (Paths/get target empty-array))]
+;;       (log-debug "Creating symlink [" abs-path "] to [" abs-target "]")
+;;       (if (not (.exists (.toFile abs-path)))
+;;         (Files/createSymbolicLink abs-path abs-target attrs)))))
+;; 
+;; (defn read-dir-contents
+;;   [dir]
+;;   (if (exists-file? dir)
+;;     (let [content-files (.listFiles (File. dir))]
+;;       (map #(.getName ^File %) content-files))
+;;     []))
+;; 
+;; (defn compact
+;;   [aseq]
+;;   (filter (complement nil?) aseq))
+;; 
+;; (defn current-classpath
+;;   []
+;;   (System/getProperty "java.class.path"))
+;; 
+;; (defn get-full-jars
+;;   [dir]
+;;   (map #(str dir Utils/filePathSeparator %) (filter #(.endsWith % ".jar") (read-dir-contents dir))))
+;; 
+;; (defn worker-classpath
+;;   []
+;;   (let [storm-dir (System/getProperty "storm.home")
+;;         storm-lib-dir (str storm-dir Utils/filePathSeparator "lib")
+;;         storm-conf-dir (if-let [confdir (System/getenv "STORM_CONF_DIR")]
+;;                          confdir 
+;;                          (str storm-dir Utils/filePathSeparator "conf"))
+;;         storm-extlib-dir (str storm-dir Utils/filePathSeparator "extlib")
+;;         extcp (System/getenv "STORM_EXT_CLASSPATH")]
+;;     (if (nil? storm-dir) 
+;;       (current-classpath)
+;;       (str/join Utils/classPathSeparator
+;;                 (remove nil? (concat (get-full-jars storm-lib-dir) (get-full-jars storm-extlib-dir) [extcp] [storm-conf-dir]))))))
+;; 
+;; (defn add-to-classpath
+;;   [classpath paths]
+;;   (if (empty? paths)
+;;     classpath
+;;     (str/join Utils/classPathSeparator (cons classpath paths))))
+;; 
+;; (defn ^ReentrantReadWriteLock mk-rw-lock
+;;   []
+;;   (ReentrantReadWriteLock.))
+;; 
+;; (defmacro read-locked
+;;   [rw-lock & body]
+;;   (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
+;;     `(let [rlock# (.readLock ~lock)]
+;;        (try (.lock rlock#)
+;;          ~@body
+;;          (finally (.unlock rlock#))))))
+;; 
+;; (defmacro write-locked
+;;   [rw-lock & body]
+;;   (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
+;;     `(let [wlock# (.writeLock ~lock)]
+;;        (try (.lock wlock#)
+;;          ~@body
+;;          (finally (.unlock wlock#))))))
+;; 
+;; (defn time-delta
+;;   [time-secs]
+;;   (- (Utils/currentTimeSecs) time-secs))
+;; 
+;; (defn time-delta-ms
+;;   [time-ms]
+;;   (- (System/currentTimeMillis) (long time-ms)))
+;; 
+;; (defn parse-int
+;;   [str]
+;;   (Integer/valueOf str))
+;; 
+;; (defn integer-divided
+;;   [sum num-pieces]
+;;   (clojurify-structure (Utils/integerDivided sum num-pieces)))
+;; 
+;; (defn collectify
+;;   [obj]
+;;   (if (or (sequential? obj) (instance? Collection obj))
+;;     obj
+;;     [obj]))
+;; 
+;; (defn to-json
+;;   [obj]
+;;   (JSONValue/toJSONString obj))
+;; 
+;; (defn from-json
+;;   [^String str]
+;;   (if str
+;;     (clojurify-structure
+;;       (JSONValue/parse str))
+;;     nil))
+;; 
+;; (defmacro letlocals
+;;   [& body]
+;;   (let [[tobind lexpr] (split-at (dec (count body)) body)
+;;         binded (vec (mapcat (fn [e]
+;;                               (if (and (list? e) (= 'bind (first e)))
+;;                                 [(second e) (last e)]
+;;                                 ['_ e]
+;;                                 ))
+;;                             tobind))]
+;;     `(let ~binded
+;;        ~(first lexpr))))
+;; 
+;; (defn remove-first
+;;   [pred aseq]
+;;   (let [[b e] (split-with (complement pred) aseq)]
+;;     (when (empty? e)
+;;       (throw (IllegalArgumentException. "Nothing to remove")))
+;;     (concat b (rest e))))
+;; 
+;; (defn assoc-non-nil
+;;   [m k v]
+;;   (if v (assoc m k v) m))
+;; 
+;; (defn multi-set
+;;   "Returns a map of elem to count"
+;;   [aseq]
+;;   (apply merge-with +
+;;          (map #(hash-map % 1) aseq)))
+;; 
+;; (defn set-var-root*
+;;   [avar val]
+;;   (alter-var-root avar (fn [avar] val)))
+;; 
+;; (defmacro set-var-root
+;;   [var-sym val]
+;;   `(set-var-root* (var ~var-sym) ~val))
+;; 
+;; (defmacro with-var-roots
+;;   [bindings & body]
+;;   (let [settings (partition 2 bindings)
+;;         tmpvars (repeatedly (count settings) (partial gensym "old"))
+;;         vars (map first settings)
+;;         savevals (vec (mapcat (fn [t v] [t v]) tmpvars vars))
+;;         setters (for [[v s] settings] `(set-var-root ~v ~s))
+;;         restorers (map (fn [v s] `(set-var-root ~v ~s)) vars tmpvars)]
+;;     `(let ~savevals
+;;        ~@setters
+;;        (try
+;;          ~@body
+;;          (finally
+;;            ~@restorers)))))
 
 (defn map-diff
   "Returns mappings in m2 that aren't in m1"
@@ -781,12 +782,6 @@
           my-elems (map first colls)
           rest-elems (apply interleave-all (map rest colls))]
       (concat my-elems rest-elems))))
-
-(defn any-intersection
-  [& sets]
-  (let [elem->count (multi-set (apply concat sets))]
-    (-> (filter-val #(> % 1) elem->count)
-        keys)))
 
 (defn between?
   "val >= lower and val <= upper"
@@ -831,8 +826,8 @@
   (class obj))
 
 (defn uptime-computer []
-  (let [start-time (current-time-secs)]
-    (fn [] (time-delta start-time))))
+  (let [start-time (Utils/currentTimeSecs)]
+    (fn [] (Time/delta start-time))))
 
 (defn stringify-error [error]
   (let [result (StringWriter.)
@@ -890,8 +885,53 @@
   (log-message prefix ": " val)
   val)
 
+<<<<<<< HEAD
 ;; The following two will go away when worker, task, executor go away.
 (defn assoc-apply-self [curr key afn]
+=======
+(defn zip-contains-dir?
+  [zipfile target]
+  (let [entries (->> zipfile (ZipFile.) .entries enumeration-seq (map (memfn getName)))]
+    (boolean (some #(.startsWith % (str target "/")) entries))))
+
+(defn url-encode
+  [s]
+  (codec/url-encode s))
+
+(defn url-decode
+  [s]
+  (codec/url-decode s))
+
+(defn join-maps
+  [& maps]
+  (let [all-keys (apply set/union (for [m maps] (-> m keys set)))]
+    (into {} (for [k all-keys]
+               [k (for [m maps] (m k))]))))
+
+(defn partition-fixed
+  [max-num-chunks aseq]
+  (if (zero? max-num-chunks)
+    []
+    (let [chunks (->> (Utils/integerDivided (count aseq) max-num-chunks)
+                      clojurify-structure
+                      (#(dissoc % 0))
+                      (sort-by (comp - first))
+                      (mapcat (fn [[size amt]] (repeat amt size)))
+                      )]
+      (loop [result []
+             [chunk & rest-chunks] chunks
+             data aseq]
+        (if (nil? chunk)
+          result
+          (let [[c rest-data] (split-at chunk data)]
+            (recur (conj result c)
+                   rest-chunks
+                   rest-data)))))))
+
+
+(defn assoc-apply-self
+  [curr key afn]
+>>>>>>> c7c0a105e68c688a65890ec3a4b28295c1238119
   (assoc curr key (afn curr)))
 
 (defmacro recursive-map
@@ -963,13 +1003,13 @@
 
 (defn logs-filename
   [storm-id port]
-  (str storm-id file-path-separator port file-path-separator "worker.log"))
+  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "worker.log"))
 
 (def worker-log-filename-pattern #"^worker.log(.*)")
 
 (defn event-logs-filename
   [storm-id port]
-  (str storm-id file-path-separator port file-path-separator "events.log"))
+  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "events.log"))
 
 (defn clojure-from-yaml-file [yamlFile]
   (try

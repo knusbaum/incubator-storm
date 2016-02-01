@@ -23,13 +23,14 @@
             ComponentCommon Grouping$_Fields SpoutSpec NullStruct StreamInfo
             GlobalStreamId ComponentObject ComponentObject$_Fields
             ShellComponent SupervisorInfo])
-  (:import [org.apache.storm.utils Utils NimbusClient])
+  (:import [org.apache.storm.utils Utils NimbusClient ConfigUtils])
   (:import [org.apache.storm Constants])
   (:import [org.apache.storm.security.auth ReqContext])
   (:import [org.apache.storm.grouping CustomStreamGrouping])
   (:import [org.apache.storm.topology TopologyBuilder])
   (:import [org.apache.storm.clojure RichShellBolt RichShellSpout])
-  (:import [org.apache.thrift.transport TTransport])
+  (:import [org.apache.thrift.transport TTransport]
+           (org.json.simple JSONValue))
   (:use [org.apache.storm util config log zookeeper]))
 
 (defn instantiate-java-object
@@ -73,7 +74,7 @@
     (nimbus-client-and-conn host port nil))
   ([host port as-user]
   (log-message "Connecting to Nimbus at " host ":" port " as user: " as-user)
-  (let [conf (read-storm-config)
+  (let [conf (clojurify-structure (ConfigUtils/readStormConfig))
         nimbusClient (NimbusClient. conf host port nil as-user)
         client (.getClient nimbusClient)
         transport (.transport nimbusClient)]
@@ -88,7 +89,7 @@
 
 (defmacro with-configured-nimbus-connection
   [client-sym & body]
-  `(let [conf# (read-storm-config)
+  `(let [conf# (clojurify-structure (ConfigUtils/readStormConfig))
          context# (ReqContext/context)
          user# (if (.principal context#) (.getName (.principal context#)))
          nimbusClient# (NimbusClient/getConfiguredClientAs conf# user#)
@@ -107,6 +108,7 @@
   [fields]
   (StreamInfo. fields false))
 
+;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defn mk-output-spec
   [output-spec]
   (let [output-spec (if (map? output-spec)
@@ -125,7 +127,7 @@
     (when parallelism-hint
       (.set_parallelism_hint ret parallelism-hint))
     (when conf
-      (.set_json_conf ret (to-json conf)))
+      (.set_json_conf ret (JSONValue/toJSONString conf)))
     ret))
 
 (defnk mk-spout-spec*

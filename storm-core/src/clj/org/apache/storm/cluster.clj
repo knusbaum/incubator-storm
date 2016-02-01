@@ -260,7 +260,7 @@
         state-id (.register
                   cluster-state
                   (fn [type path]
-                    (let [[subtree & args] (tokenize-path path)]
+                    (let [[subtree & args] (Utils/tokenizePath path)]
                       (condp = subtree
                          ASSIGNMENTS-ROOT (if (empty? args)
                                              (issue-callback! assignments-callback)
@@ -275,7 +275,9 @@
                          LOGCONFIG-ROOT (issue-map-callback! log-config-callback (first args))
                          BACKPRESSURE-ROOT (issue-map-callback! backpressure-callback (first args))
                          ;; this should never happen
-                         (exit-process! 30 "Unknown callback for subtree " subtree args)))))]
+                         ;(exit-process! 30 "Unknown callback for subtree " subtree args)
+                         (Utils/exitProcess 30 ["Unknown callback for subtree " subtree args])
+                          ))))]
     (doseq [p [ASSIGNMENTS-SUBTREE STORMS-SUBTREE SUPERVISORS-SUBTREE WORKERBEATS-SUBTREE ERRORS-SUBTREE BLOBSTORE-SUBTREE NIMBUSES-SUBTREE
                LOGCONFIG-SUBTREE]]
       (.mkdirs cluster-state p acls))
@@ -340,7 +342,7 @@
       (setup-blobstore!
         [this key nimbusInfo versionInfo]
         (let [path (str (blobstore-path key) "/" (.toHostPortString nimbusInfo) "-" versionInfo)]
-          (log-message "setup-path" path)
+          (log-message "setup-path: " path)
           (.mkdirs cluster-state (blobstore-path key) acls)
           ;we delete the node first to ensure the node gets created as part of this session only.
           (.delete_node_blobstore cluster-state (str (blobstore-path key)) (.toHostPortString nimbusInfo))
@@ -382,7 +384,7 @@
         ;; long dead worker with a skewed clock overrides all the timestamps. By only checking heartbeats
         ;; with an assigned node+port, and only reading executors from that heartbeat that are actually assigned,
         ;; we avoid situations like that
-        (let [node+port->executors (reverse-map executor->node+port)
+        (let [node+port->executors (clojurify-structure (Utils/reverseMap executor->node+port))
               all-heartbeats (for [[[node port] executors] node+port->executors]
                                (->> (get-worker-heartbeat this storm-id node port)
                                     (convert-executor-beats executors)
@@ -581,7 +583,7 @@
          [this storm-id component-id node port error]
          (let [path (error-path storm-id component-id)
                last-error-path (last-error-path storm-id component-id)
-               data (thriftify-error {:time-secs (current-time-secs) :error (stringify-error error) :host node :port port})
+               data (thriftify-error {:time-secs (Utils/currentTimeSecs) :error (stringify-error error) :host node :port port})
                _ (.mkdirs cluster-state path acls)
                ser-data (Utils/serialize data)
                _ (.mkdirs cluster-state path acls)

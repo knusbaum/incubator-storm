@@ -26,7 +26,7 @@
   (:use [org.apache.storm.daemon [common :only [ACKER-COMPONENT-ID ACKER-INIT-STREAM-ID ACKER-ACK-STREAM-ID
                                               ACKER-FAIL-STREAM-ID mk-authorization-handler
                                               start-metrics-reporters]]])
-  (:import [org.apache.storm.utils Utils]
+  (:import [org.apache.storm.utils Time]
            [org.apache.storm.generated NimbusSummary])
   (:use [clojure.string :only [blank? lower-case trim split]])
   (:import [org.apache.storm.generated ExecutorSpecificStats
@@ -41,10 +41,11 @@
   (:import [org.apache.storm.security.auth AuthUtils ReqContext])
   (:import [org.apache.storm.generated AuthorizationException ProfileRequest ProfileAction NodeInfo])
   (:import [org.apache.storm.security.auth AuthUtils])
-  (:import [org.apache.storm.utils VersionInfo])
+  (:import [org.apache.storm.utils Utils VersionInfo ConfigUtils])
   (:import [org.apache.storm Config])
   (:import [java.io File])
   (:import [java.net URLEncoder URLDecoder])
+  (:import [org.json.simple JSONValue])
   (:require [compojure.route :as route]
             [compojure.handler :as handler]
             [ring.util.response :as resp]
@@ -54,7 +55,7 @@
   (:import [org.apache.logging.log4j Level])
   (:gen-class))
 
-(def ^:dynamic *STORM-CONF* (read-storm-config))
+(def ^:dynamic *STORM-CONF* (clojurify-structure (ConfigUtils/readStormConfig)))
 (def ^:dynamic *UI-ACL-HANDLER* (mk-authorization-handler (*STORM-CONF* NIMBUS-AUTHORIZER) *STORM-CONF*))
 (def ^:dynamic *UI-IMPERSONATION-HANDLER* (mk-authorization-handler (*STORM-CONF* NIMBUS-IMPERSONATION-AUTHORIZER) *STORM-CONF*))
 (def http-creds-handler (AuthUtils/GetUiHttpCredentialsPlugin *STORM-CONF*))
@@ -150,13 +151,16 @@
   (let [fname (logs-filename topology-id port)]
     (logviewer-link host fname secure?)))
 
-(defn nimbus-log-link [host port]
-  (url-format "http://%s:%s/daemonlog?file=nimbus.log" host (*STORM-CONF* LOGVIEWER-PORT) port))
+(defn nimbus-log-link [host]
+  (url-format "http://%s:%s/daemonlog?file=nimbus.log" host (*STORM-CONF* LOGVIEWER-PORT)))
+
+(defn supervisor-log-link [host]
+  (url-format "http://%s:%s/daemonlog?file=supervisor.log" host (*STORM-CONF* LOGVIEWER-PORT)))
 
 (defn get-error-time
   [error]
   (if error
-    (time-delta (.get_error_time_secs ^ErrorInfo error))))
+    (Time/delta (.get_error_time_secs ^ErrorInfo error))))
 
 (defn get-error-data
   [error]
@@ -301,12 +305,20 @@
           bolt-summs (filter (partial bolt-summary? topology) execs)
           spout-comp-summs (group-by-comp spout-summs)
           bolt-comp-summs (group-by-comp bolt-summs)
+          ;TODO: when translating this function, you should replace the filter-val with a proper for loop + if condition HERE
           bolt-comp-summs (filter-key (mk-include-sys-fn include-sys?)
                                       bolt-comp-summs)]
       (visualization-data
        (merge (hashmap-to-persistent spouts)
               (hashmap-to-persistent bolts))
        spout-comp-summs bolt-comp-summs window id))))
+
+(defn- from-json
+  [^String str]
+  (if str
+    (clojurify-structure
+      (JSONValue/parse str))
+    nil))
 
 (defn validate-tplg-submit-params [params]
   (let [tplg-jar-file (params :topologyJar)
@@ -321,12 +333,12 @@
   (let [tplg-main-class (if (not-nil? tplg-config) (trim (tplg-config "topologyMainClass")))
         tplg-main-class-args (if (not-nil? tplg-config) (tplg-config "topologyMainClassArgs"))
         storm-home (System/getProperty "storm.home")
-        storm-conf-dir (str storm-home file-path-separator "conf")
+        storm-conf-dir (str storm-home Utils/filePathSeparator "conf")
         storm-log-dir (if (not-nil? (*STORM-CONF* "storm.log.dir")) (*STORM-CONF* "storm.log.dir")
-                          (str storm-home file-path-separator "logs"))
-        storm-libs (str storm-home file-path-separator "lib" file-path-separator "*")
-        java-cmd (str (System/getProperty "java.home") file-path-separator "bin" file-path-separator "java")
-        storm-cmd (str storm-home file-path-separator "bin" file-path-separator "storm")
+                          (str storm-home Utils/filePathSeparator "logs"))
+        storm-libs (str storm-home Utils/filePathSeparator "lib" Utils/filePathSeparator "*")
+        java-cmd (str (System/getProperty "java.home") Utils/filePathSeparator "bin" Utils/filePathSeparator "java")
+        storm-cmd (str storm-home Utils/filePathSeparator "bin" Utils/filePathSeparator "storm")
         tplg-cmd-response (apply sh
                             (flatten
                               [storm-cmd "jar" tplg-jar-file tplg-main-class
@@ -408,7 +420,7 @@
          {
           "host" (.get_host n)
           "port" (.get_port n)
-          "nimbusLogLink" (nimbus-log-link (.get_host n) (.get_port n))
+          "nimbusLogLink" (nimbus-log-link (.get_host n))
           "status" (if (.is_isLeader n) "Leader" "Not a Leader")
           "version" (.get_version n)
           "nimbusUpTime" (pretty-uptime-sec uptime)
@@ -432,6 +444,7 @@
        "totalCpu" (get (.get_total_resources s) Config/SUPERVISOR_CPU_CAPACITY)
        "usedMem" (.get_used_mem s)
        "usedCpu" (.get_used_cpu s)
+       "logLink" (supervisor-log-link (.get_host s))
        "version" (.get_version s)})
     "schedulerDisplayResource" (*STORM-CONF* Config/SCHEDULER_DISPLAY_RESOURCE)}))
 
@@ -494,6 +507,7 @@
           bolt-executor-summaries (filter (partial bolt-summary? storm-topology) (.get_executors topology-info))
           spout-comp-id->executor-summaries (group-by-comp spout-executor-summaries)
           bolt-comp-id->executor-summaries (group-by-comp bolt-executor-summaries)
+          ;TODO: when translating this function, you should replace the filter-val with a proper for loop + if condition HERE
           bolt-comp-id->executor-summaries (filter-key (mk-include-sys-fn include-sys?) bolt-comp-id->executor-summaries)
           id->spout-spec (.get_spouts storm-topology)
           id->bolt (.get_bolts storm-topology)
