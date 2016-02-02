@@ -786,11 +786,6 @@
   `(try ~@body
      (catch Throwable t# (~afn t#))))
 
-
-(defn uptime-computer []
-  (let [start-time (Utils/currentTimeSecs)]
-    (fn [] (Time/delta start-time))))
-
 ;(defn nil-to-zero
 ;  [v]
 ;  (or v 0))
@@ -810,20 +805,20 @@
 ;(defn throw-runtime [& strs]
 ;  (throw (RuntimeException. (apply str strs))))
 
-(defn redirect-stdio-to-slf4j!
-  []
-  ;; set-var-root doesn't work with *out* and *err*, so digging much deeper here
-  ;; Unfortunately, this code seems to work at the REPL but not when spawned as worker processes
-  ;; it might have something to do with being a child process
-  ;; (set! (. (.getThreadBinding RT/OUT) val)
-  ;;       (java.io.OutputStreamWriter.
-  ;;         (log-stream :info "STDIO")))
-  ;; (set! (. (.getThreadBinding RT/ERR) val)
-  ;;       (PrintWriter.
-  ;;         (java.io.OutputStreamWriter.
-  ;;           (log-stream :error "STDIO"))
-  ;;         true))
-  (log-capture! "STDIO"))
+;(defn redirect-stdio-to-slf4j!
+;  []
+;  ;; set-var-root doesn't work with *out* and *err*, so digging much deeper here
+;  ;; Unfortunately, this code seems to work at the REPL but not when spawned as worker processes
+;  ;; it might have something to do with being a child process
+;  ;; (set! (. (.getThreadBinding RT/OUT) val)
+;  ;;       (java.io.OutputStreamWriter.
+;  ;;         (log-stream :info "STDIO")))
+;  ;; (set! (. (.getThreadBinding RT/ERR) val)
+;  ;;       (PrintWriter.
+;  ;;         (java.io.OutputStreamWriter.
+;  ;;           (log-stream :error "STDIO"))
+;  ;;         true))
+;  (log-capture! "STDIO"))
 
 ;(defn spy
 ;  [prefix val]

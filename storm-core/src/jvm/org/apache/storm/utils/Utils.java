@@ -2336,4 +2336,24 @@ public class Utils {
         l.addAll(paths);
         return StringUtils.join(l, System.getProperty("path.separator"));
     }
+
+    public static class UptimeComputer {
+        int startTime = 0;
+        
+        public UptimeComputer() {
+            startTime = Utils.currentTimeSecs();
+        }
+        
+        public int upTime() {
+            return Time.delta(startTime);
+        }
+    }
+
+    public static UptimeComputer makeUptimeComputer() {
+        return _instance.makeUptimeComputerImpl();
+    }
+
+    public UptimeComputer makeUptimeComputerImpl() {
+        return new UptimeComputer();
+    }
 }

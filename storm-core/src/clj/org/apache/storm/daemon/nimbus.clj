@@ -14,8 +14,7 @@
 ;; See the License for the specific language governing permissions and
 ;; limitations under the License.
 (ns org.apache.storm.daemon.nimbus
-  (:import [org.apache.thrift.server THsHaServer THsHaServer$Args]
-           [org.apache.storm.utils UptimeComputer])
+  (:import [org.apache.thrift.server THsHaServer THsHaServer$Args])
   (:import [org.apache.storm.generated KeyNotFoundException])
   (:import [org.apache.storm.blobstore LocalFsBlobStore])
   (:import [org.apache.thrift.protocol TBinaryProtocol TBinaryProtocol$Factory])
@@ -190,8 +189,7 @@
      :blob-downloaders (mk-blob-cache-map conf)
      :blob-uploaders (mk-blob-cache-map conf)
      :blob-listers (mk-bloblist-cache-map conf)
-     ;:uptime (UptimeComputer.)
-     :uptime (uptime-computer)
+     :uptime (Utils/makeUptimeComputer)
      :validator (Utils/newInstance (conf NIMBUS-TOPOLOGY-VALIDATOR))
      :timer (mk-timer :kill-fn (fn [t]
                                  (log-error t "Error when processing event")
@@ -1834,8 +1832,7 @@
                                          (.set_used_cpu sup-sum used-cpu))
                                        (when-let [version (:version info)] (.set_version sup-sum version))
                                        sup-sum))
-              ;nimbus-uptime (. (:uptime nimbus) upTime)
-              nimbus-uptime ((:uptime nimbus))
+              nimbus-uptime (. (:uptime nimbus) upTime)
               bases (topology-bases storm-cluster-state)
               nimbuses (.nimbuses storm-cluster-state)
 

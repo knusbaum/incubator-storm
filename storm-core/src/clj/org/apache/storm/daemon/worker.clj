@@ -24,7 +24,7 @@
   (:require [org.apache.storm.messaging.loader :as msg-loader])
   (:import [java.util.concurrent Executors]
            [org.apache.storm.hooks IWorkerHook BaseWorkerHook]
-           [org.apache.storm.utils UptimeComputer])
+           [uk.org.lidalia.sysoutslf4j.context SysOutOverSLF4J])
   (:import [java.util ArrayList HashMap]
            [java.util.concurrent.locks ReentrantReadWriteLock])
   (:import [org.apache.commons.io FileUtils])
@@ -71,8 +71,7 @@
                     (apply merge)))
         zk-hb {:storm-id (:storm-id worker)
                :executor-stats stats
-               ;:uptime (. (:uptime worker) upTime)
-               :uptime ((:uptime worker))
+               :uptime (. (:uptime worker) upTime)
                :time-secs (Utils/currentTimeSecs)
                }]
     ;; do the zookeeper heartbeat
@@ -309,8 +308,7 @@
                                  (into {})
                                  (HashMap.))
       :suicide-fn (mk-suicide-fn conf)
-      ;:uptime (UptimeComputer.)
-      :uptime (uptime-computer)
+      :uptime (Utils/makeUptimeComputer)
       :default-shared-resources (mk-default-resources <>)
       :user-shared-resources (mk-user-resources <>)
       :transfer-local-fn (mk-transfer-local-fn <>)
@@ -606,7 +604,7 @@
   (log-message "Launching worker for " storm-id " on " assignment-id ":" port " with id " worker-id
                " and conf " conf)
   (if-not (ConfigUtils/isLocalMode conf)
-    (redirect-stdio-to-slf4j!))
+    (SysOutOverSLF4J/sendSystemOutAndErrToSLF4J))
   ;; because in local mode, its not a separate
   ;; process. supervisor will register it in this case
   (when (= :distributed (ConfigUtils/clusterMode conf))

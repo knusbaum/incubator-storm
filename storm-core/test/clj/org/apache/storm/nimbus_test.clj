@@ -31,7 +31,7 @@
             LogConfig LogLevel LogLevelAction])
   (:import [java.util HashMap])
   (:import [java.io File])
-  (:import [org.apache.storm.utils Time Utils ConfigUtils IPredicate])
+  (:import [org.apache.storm.utils Time Utils Utils$UptimeComputer ConfigUtils IPredicate])
   (:import [org.apache.commons.io FileUtils]
            [org.json.simple JSONValue])
   (:use [org.apache.storm testing MockAutoCred util config log timer zookeeper])
@@ -1393,7 +1393,10 @@
           expected-acls nimbus/NIMBUS-ZK-ACLS
           fake-inimbus (reify INimbus (getForcedScheduler [this] nil))]
 
-      (with-open [_ (proxy [MockedUtils] [] (newInstanceImpl [_]))
+      (with-open [_ (proxy [MockedUtils] []
+                      (newInstanceImpl [_])
+                      (makeUptimeComputer [] (proxy [Utils$UptimeComputer] []
+                                               (upTime [] 0))))
                   _ (proxy [MockedConfigUtils] []
                       (nimbusTopoHistoryStateImpl [conf] nil))]
         (stubbing [mk-authorization-handler nil
@@ -1401,7 +1404,6 @@
                    nimbus/file-cache-map nil
                    nimbus/mk-blob-cache-map nil
                    nimbus/mk-bloblist-cache-map nil
-                   uptime-computer nil
                    mk-timer nil
                    zk-leader-elector nil
                    nimbus/mk-scheduler nil]

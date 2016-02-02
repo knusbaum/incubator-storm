@@ -21,7 +21,7 @@
   (:require [clojure [string :as string] [set :as set]])
   (:import [org.apache.storm.testing TestWordCounter TestWordSpout TestGlobalCount TestAggregatesCounter TestPlannerSpout])
   (:import [org.apache.storm.scheduler ISupervisor])
-  (:import [org.apache.storm.utils ConfigUtils])
+  (:import [org.apache.storm.utils Utils$UptimeComputer ConfigUtils])
   (:import [org.apache.storm.generated RebalanceOptions])
   (:import [org.apache.storm.testing.staticmocking MockedConfigUtils])
   (:import [java.util UUID])
@@ -587,11 +587,13 @@
           fake-isupervisor (reify ISupervisor
                              (getSupervisorId [this] nil)
                              (getAssignmentId [this] nil))]
-      (with-open [_ (proxy [MockedConfigUtils] []
+      (with-open [_ (proxy [MockedUtils] []
+                      (makeUptimeComputer [] (proxy [Utils$UptimeComputer] []
+                                               (upTime [] 0))))
+                  _ (proxy [MockedConfigUtils] []
                       (supervisorStateImpl [conf] nil)
                       (supervisorLocalDirImpl [conf] nil))]
-        (stubbing [uptime-computer nil
-                   cluster/mk-storm-cluster-state nil
+        (stubbing [cluster/mk-storm-cluster-state nil
                    mk-timer nil
                    ]
           (with-open [- (proxy [MockedUtils] [] (localHostnameImpl [] nil))]

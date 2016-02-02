@@ -14,8 +14,7 @@
 ;; See the License for the specific language governing permissions and
 ;; limitations under the License.
 (ns org.apache.storm.daemon.supervisor
-  (:import [java.io File IOException FileOutputStream]
-           [org.apache.storm.utils UptimeComputer])
+  (:import [java.io File IOException FileOutputStream])
   (:import [org.apache.storm.scheduler ISupervisor]
            [org.apache.storm.utils LocalState Time Utils ConfigUtils]
            [org.apache.storm.daemon Shutdownable]
@@ -316,8 +315,7 @@
    :shared-context shared-context
    :isupervisor isupervisor
    :active (atom true)
-   ;:uptime (UptimeComputer.)
-   :uptime (uptime-computer)
+   :uptime (Utils/makeUptimeComputer)
    :version STORM-VERSION
    :worker-thread-pids-atom (atom {})
    :storm-cluster-state (cluster/mk-storm-cluster-state conf :acls (when
@@ -801,8 +799,7 @@
                                                   ;; used ports
                                                  (.getMetadata isupervisor)
                                                  (conf SUPERVISOR-SCHEDULER-META)
-                                                 ;(. (:uptime supervisor) upTime)
-                                                 ((:uptime supervisor))
+                                                 (. (:uptime supervisor) upTime)
                                                  (:version supervisor)
                                                  (mk-supervisor-capacities conf))))]
     (heartbeat-fn)

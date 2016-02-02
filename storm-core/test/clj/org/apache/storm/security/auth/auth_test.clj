@@ -18,9 +18,9 @@
     (:require [org.apache.storm.daemon [nimbus :as nimbus]])
     (:import [org.apache.thrift TException]
              [org.json.simple JSONValue]
-           [org.apache.storm.security.auth.authorizer ImpersonationAuthorizer]
-           [java.net Inet4Address]
-             [org.apache.storm.utils UptimeComputer])
+             [org.apache.storm.utils Utils]
+             [org.apache.storm.security.auth.authorizer ImpersonationAuthorizer]
+             [java.net Inet4Address])
     (:import [org.apache.thrift.transport TTransportException])
     (:import [java.nio ByteBuffer])
     (:import [java.security Principal AccessController])
@@ -64,8 +64,7 @@
      :heartbeats-cache (atom {})
      :downloaders nil
      :uploaders nil
-     ;:uptime (UptimeComputer.)
-     :uptime (uptime-computer)
+     :uptime (Utils/makeUptimeComputer)
      :validator nil
      :timer nil
      :scheduler nil
