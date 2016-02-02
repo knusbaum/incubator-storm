@@ -869,7 +869,6 @@
 (defn changed-executors [executor->node+port new-executor->node+port]
   (let [executor->node+port (if executor->node+port (sort executor->node+port) nil)
         new-executor->node+port (if new-executor->node+port (sort new-executor->node+port) nil)
-        _ (log-message "executor->node+port: " executor->node+port)
         slot-assigned (clojurify-structure (Utils/reverseMap executor->node+port))
         new-slot-assigned (clojurify-structure (Utils/reverseMap new-executor->node+port))
         brand-new-slots (map-diff slot-assigned new-slot-assigned)]

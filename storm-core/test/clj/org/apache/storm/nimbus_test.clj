@@ -23,14 +23,14 @@
            [org.apache.storm.nimbus InMemoryTopologyActionNotifier])
   (:import [org.apache.storm.scheduler INimbus])
   (:import [org.apache.storm.nimbus ILeaderElector NimbusInfo])
-  (:import [org.apache.storm.testing.staticmocking MockedConfigUtils])
   (:import [org.apache.storm.generated Credentials NotAliveException SubmitOptions
             TopologyInitialStatus TopologyStatus AlreadyAliveException KillOptions RebalanceOptions
             InvalidTopologyException AuthorizationException
             LogConfig LogLevel LogLevelAction])
   (:import [java.util HashMap])
   (:import [java.io File])
-  (:import [org.apache.storm.utils Time Utils ConfigUtils IPredicate])
+  (:import [org.apache.storm.utils Time Utils ConfigUtils IPredicate]
+           [org.apache.storm.utils.staticmocking ConfigUtilsInstaller])
   (:import [org.apache.commons.io FileUtils]
            [org.json.simple JSONValue])
   (:use [org.apache.storm testing MockAutoCred util config log timer zookeeper])
@@ -1390,9 +1390,10 @@
                      STORM-PRINCIPAL-TO-LOCAL-PLUGIN "org.apache.storm.security.auth.DefaultPrincipalToLocal"
                      NIMBUS-THRIFT-PORT 6666})
           expected-acls nimbus/NIMBUS-ZK-ACLS
-          fake-inimbus (reify INimbus (getForcedScheduler [this] nil))]
-      (with-open [_ (proxy [MockedConfigUtils] []
+          fake-inimbus (reify INimbus (getForcedScheduler [this] nil))
+          fake-cu (proxy [ConfigUtils] []
                       (nimbusTopoHistoryStateImpl [conf] nil))]
+      (with-open [_ (ConfigUtilsInstaller. fake-cu)]
         (stubbing [mk-authorization-handler nil
                  cluster/mk-storm-cluster-state nil
                  nimbus/file-cache-map nil

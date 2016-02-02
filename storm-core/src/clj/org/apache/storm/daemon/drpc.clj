@@ -87,7 +87,7 @@
                   (swap! id->request dissoc id)
                   (swap! id->start dissoc id))
         my-ip (.getHostAddress (InetAddress/getLocalHost))
-        clear-thread (async-loop
+        clear-thread (Utils/asyncLoop
                        (fn []
                          (doseq [[id start] @id->start]
                            (when (> (Time/delta start) (conf DRPC-REQUEST-TIMEOUT-SECS))

@@ -18,14 +18,21 @@ package org.apache.storm.utils.staticmocking;
 
 import org.apache.storm.utils.Utils;
 
-public class MockedUtils extends Utils implements AutoCloseable {
+public class UtilsInstaller implements AutoCloseable {
 
-    public MockedUtils() {
-        Utils.setInstance(this);
+    private Utils _oldInstance;
+    private Utils _curInstance;
+
+    public UtilsInstaller(Utils instance) {
+        _oldInstance = Utils.setInstance(instance);
+        _curInstance = instance;
     }
 
     @Override
     public void close() throws Exception {
-        Utils.resetInstance();
+        if (Utils.setInstance(_oldInstance) != _curInstance) {
+            throw new IllegalStateException(
+                    "Instances of this resource must be closed in reverse order of opening.");
+        }
     }
 }

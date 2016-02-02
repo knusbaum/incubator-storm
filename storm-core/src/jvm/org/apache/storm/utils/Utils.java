@@ -62,12 +62,14 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -93,7 +95,6 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -106,6 +107,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.Vector;
+import java.util.concurrent.Callable;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
@@ -118,26 +120,19 @@ import java.util.zip.ZipFile;
 public class Utils {
     // A singleton instance allows us to mock delegated static methods in our
     // tests by subclassing.
-    private static final Utils INSTANCE = new Utils();
-    private static Utils _instance = INSTANCE;
+    private static Utils _instance = new Utils();
 
     /**
      * Provide an instance of this class for delegates to use.  To mock out
      * delegated methods, provide an instance of a subclass that overrides the
      * implementation of the delegated method.
      * @param u a Utils instance
+     * @return the previously set instance
      */
-    public static void setInstance(Utils u) {
+    public static Utils setInstance(Utils u) {
+        Utils oldInstance = _instance;
         _instance = u;
-    }
-
-    /**
-     * Resets the singleton instance to the default. This is helpful to reset
-     * the class to its original functionality when mocking is no longer
-     * desired.
-     */
-    public static void resetInstance() {
-        _instance = INSTANCE;
+        return oldInstance;
     }
 
     private static final Logger LOG = LoggerFactory.getLogger(Utils.class);
@@ -1939,18 +1934,17 @@ public class Utils {
         Runtime.getRuntime().addShutdownHook(new Thread(sleepKill));
     }
 
-
-    /*
-        This function checks the command line argument that will be issued by the supervisor to launch a worker,
-        and makes sure it is safe to execute. This is done by replacing any single quote charachter with a
-        safe combination of single and double quotes. For example:
-        if a file is named:    foo'bar"
-        the shell cannot parse it, as soon as it reaches the first single quote, it tries to find the closing quote
-        Instead, we change it to:  'foo'"'"'bar"' which is now perfectly readable by the shell.
+    /**
+     * Returns the combined string, escaped for posix shell.
+     * @param command the list of strings to be combined
+     * @return the resulting command string
      */
-    public static String shellCmd (Collection<String> command) {
-        Vector<String> changedCommands = new Vector<>();
+    public static String shellCmd (List<String> command) {
+        List<String> changedCommands = new LinkedList<>();
         for (String str: command) {
+            if (str == null) {
+                continue;
+            }
             changedCommands.add("'" + str.replaceAll("'", "'\"'\"'") + "'");
         }
         return StringUtils.join(changedCommands, " ");
@@ -2096,5 +2090,207 @@ public class Utils {
         l.add(classpath);
         l.addAll(paths);
         return StringUtils.join(l, System.getProperty("path.separator"));
+    }
+
+    /**
+     * Writes a posix shell script file to be executed in its own process.
+     * @param dir the directory under which the script is to be written
+     * @param command the command the script is to execute
+     * @param environment optional environment variables to set before running the script's command. May be  null.
+     * @return the path to the script that has been written
+     */
+    public static String writeScript(String dir, List<String> command,
+                                     Map<String,String> environment) {
+        String path = Utils.scriptFilePath(dir);
+        try(BufferedWriter out = new BufferedWriter(new FileWriter(path))) {
+            out.write("#!/bin/bash");
+            out.newLine();
+            if (environment != null) {
+                for (String k : environment.keySet()) {
+                    String v = environment.get(k);
+                    if (v == null) {
+                        v = "";
+                    }
+                    out.write(Utils.shellCmd(
+                            Arrays.asList(
+                                    "export",k+"="+v)));
+                    out.write(";");
+                    out.newLine();
+                }
+            }
+            out.newLine();
+            out.write("exec "+Utils.shellCmd(command)+";");
+        } catch (IOException io) {
+            throw new RuntimeException("Could not write posix script file", io);
+        }
+        return path;
+    }
+
+    /**
+     * A thread that can answer if it is sleeping in the case of simulated time.
+     * This class is not useful when simulated time is not being used.
+     */
+    public static class SmartThread extends Thread {
+        public boolean isSleeping() {
+            return Time.isThreadWaiting(this);
+        }
+        public SmartThread(Runnable r) {
+            super(r);
+        }
+    }
+
+    /**
+     * Creates a thread that calls the given code repeatedly, sleeping for an
+     * interval of seconds equal to the return value of the previous call.
+     *
+     * The given afn may be a callable that returns the number of seconds to
+     * sleep, or it may be a Callable that returns another Callable that in turn
+     * returns the number of seconds to sleep. In the latter case isFactory.
+     *
+     * @param afn the code to call on each iteration
+     * @param isDaemon whether the new thread should be a daemon thread
+     * @param eh code to call when afn throws an exception
+     * @param priority the new thread's priority see
+     * @param isFactory whether afn returns a callable instead of sleep seconds
+     * @param startImmediately whether to start the thread before returning
+     * @param threadName a suffix to be appended to the thread name
+     * @return the newly created thread
+     * @see java.lang.Thread
+     */
+    public static SmartThread asyncLoop(final Callable afn,
+            boolean isDaemon, final Thread.UncaughtExceptionHandler eh,
+            int priority, final boolean isFactory, boolean startImmediately,
+            String threadName) {
+        SmartThread thread = new SmartThread(new Runnable() {
+            public void run() {
+                Object s;
+                try {
+                    Callable fn = isFactory ? (Callable) afn.call() : afn;
+                    while ((s = fn.call()) instanceof Long) {
+                        Time.sleepSecs((Long) s);
+                    }
+                } catch (Throwable t) {
+                    if (Utils.exceptionCauseIsInstanceOf(
+                            InterruptedException.class, t)) {
+                        LOG.info("Async loop interrupted!");
+                        return;
+                    }
+                    LOG.error("Async loop died!", t);
+                    throw new RuntimeException(t);
+                }
+            }
+        });
+        if (eh != null) {
+            thread.setUncaughtExceptionHandler(eh);
+        } else {
+            thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                public void uncaughtException(Thread t, Throwable e) {
+                    Utils.exitProcess(1, "Async loop died!");
+                }
+            });
+        }
+        thread.setDaemon(isDaemon);
+        thread.setPriority(priority);
+        if (threadName != null && !threadName.isEmpty()) {
+            thread.setName(thread.getName() +"-"+ threadName);
+        }
+        if (startImmediately) {
+            thread.start();
+        }
+        return thread;
+    }
+
+    /**
+     * Convenience method used when only the function and name suffix are given.
+     * @param afn the code to call on each iteration
+     * @param threadName a suffix to be appended to the thread name
+     * @return the newly created thread
+     * @see java.lang.Thread
+     */
+    public static SmartThread asyncLoop(final Callable afn, String threadName) {
+        return asyncLoop(afn, false, null, Thread.NORM_PRIORITY, false, true,
+                threadName);
+    }
+
+    /**
+     * Convenience method used when only the function is given.
+     * @param afn the code to call on each iteration
+     * @return the newly created thread
+     */
+    public static SmartThread asyncLoop(final Callable afn) {
+        return asyncLoop(afn, false, null, Thread.NORM_PRIORITY, false, true,
+                null);
+    }
+
+    /**
+     * A callback that can accept an integer.
+     * @param <V> the result type of method <code>call</code>
+     */
+    public interface ExitCodeCallable<V> extends Callable<V> {
+        V call(int exitCode);
+    }
+
+    /**
+     * Launch a new process as per {@link java.lang.ProcessBuilder} with a given
+     * callback.
+     * @param command the command to be executed in the new process
+     * @param environment the environment to be applied to the process. Can be
+     *                    null.
+     * @param logPrefix a prefix for log entries from the output of the process.
+     *                  Can be null.
+     * @param exitCodeCallback code to be called passing the exit code value
+     *                         when the process completes
+     * @param dir the working directory of the new process
+     * @return the new process
+     * @throws IOException
+     * @see java.lang.ProcessBuilder
+     */
+    public static Process launchProcess(List<String> command,
+                                        Map<String,String> environment,
+                                        final String logPrefix,
+                                        final ExitCodeCallable exitCodeCallback,
+                                        File dir)
+            throws IOException {
+        return _instance.launchProcessImpl(command, environment, logPrefix,
+                exitCodeCallback, dir);
+    }
+
+    public Process launchProcessImpl(
+            List<String> command,
+            Map<String,String> cmdEnv,
+            final String logPrefix,
+            final ExitCodeCallable exitCodeCallback,
+            File dir)
+            throws IOException {
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Map<String,String> procEnv = builder.environment();
+        if (dir != null) {
+            builder.directory(dir);
+        }
+        builder.redirectErrorStream(true);
+        if (cmdEnv != null) {
+            procEnv.putAll(cmdEnv);
+        }
+        final Process process = builder.start();
+        if (logPrefix != null || exitCodeCallback != null) {
+            Utils.asyncLoop(new Callable() {
+                public Object call() {
+                    if (logPrefix != null ) {
+                        Utils.readAndLogStream(logPrefix,
+                                process.getInputStream());
+                    }
+                    if (exitCodeCallback != null) {
+                        try {
+                            process.waitFor();
+                        } catch (InterruptedException ie) {
+                            LOG.info("{} interrupted", logPrefix);
+                            exitCodeCallback.call(process.exitValue());
+                        }
+                    }
+                    return null; // Run only once.
+                }
+            });
+        }
+        return process;
     }
 }

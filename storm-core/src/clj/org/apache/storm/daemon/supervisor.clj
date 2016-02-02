@@ -16,7 +16,8 @@
 (ns org.apache.storm.daemon.supervisor
   (:import [java.io File IOException FileOutputStream])
   (:import [org.apache.storm.scheduler ISupervisor]
-           [org.apache.storm.utils LocalState Time Utils ConfigUtils]
+           [org.apache.storm.utils LocalState Time Utils Utils$ExitCodeCallable
+                                   ConfigUtils]
            [org.apache.storm.daemon Shutdownable]
            [org.apache.storm Constants]
            [org.apache.storm.cluster ClusterStateContext DaemonType]
@@ -229,8 +230,11 @@
         wl (if wl-initial wl-initial (str storm-home "/bin/worker-launcher"))
         command (concat [wl user] args)]
     (log-message "Running as user:" user " command:" (pr-str command))
-    (launch-process command :environment environment :log-prefix log-prefix :exit-code-callback exit-code-callback :directory directory)
-  ))
+    (Utils/launchProcess command
+                         environment
+                         log-prefix
+                         exit-code-callback
+                         directory)))
 
 (defnk worker-launcher-and-wait [conf user args :environment {} :log-prefix nil]
   (let [process (worker-launcher conf user args :environment environment)]
@@ -698,16 +702,16 @@
       (worker-launcher
         conf
         user
-        ["profiler" target-dir (write-script target-dir command :environment environment)]
+        ["profiler" target-dir (Utils/writeScript target-dir command environment)]
         :log-prefix log-prefix
         :exit-code-callback exit-code-on-profile-action
         :directory (File. target-dir)))
-    (launch-process
+    (Utils/launchProcess
       command
-      :environment environment
-      :log-prefix log-prefix
-      :exit-code-callback exit-code-on-profile-action
-      :directory (File. target-dir))))
+      environment
+      log-prefix
+      exit-code-on-profile-action
+      (File. target-dir))))
 
 (defn mk-run-profiler-actions-for-all-topologies
   "Returns a function that downloads all profile-actions listed for all topologies assigned
@@ -1135,22 +1139,28 @@
                      (:assignment-id supervisor)
                      port
                      worker-id])
-          command (->> command (map str) (filter (complement empty?)))]
+          command (->> command
+                       (map str)
+                       (filter (complement empty?)))]
       (log-message "Launching worker with command: " (Utils/shellCmd command))
       (write-log-metadata! storm-conf user worker-id storm-id port conf)
       (ConfigUtils/setWorkerUserWSE conf worker-id user)
       (create-artifacts-link conf storm-id port worker-id)
       (let [log-prefix (str "Worker Process " worker-id)
-            callback (fn [exit-code]
-                       (log-message log-prefix " exited with code: " exit-code)
-                       (add-dead-worker worker-id))
+            callback (reify Utils$ExitCodeCallable
+                       (call [this exit-code]
+                         (log-message log-prefix " exited with code: " exit-code)
+                         (add-dead-worker worker-id)))
             worker-dir (ConfigUtils/workerRoot conf worker-id)]
         (remove-dead-worker worker-id)
         (create-blobstore-links conf storm-id worker-id)
         (if run-worker-as-user
-          (worker-launcher conf user ["worker" worker-dir (write-script worker-dir command :environment topology-worker-environment)] :log-prefix log-prefix :exit-code-callback callback :directory (File. worker-dir))
-          (launch-process command :environment topology-worker-environment :log-prefix log-prefix :exit-code-callback callback :directory (File. worker-dir)))
-        )))
+          (worker-launcher conf user ["worker" worker-dir (Utils/writeScript worker-dir command topology-worker-environment)] :log-prefix log-prefix :exit-code-callback callback :directory (File. worker-dir))
+          (Utils/launchProcess command
+                               topology-worker-environment
+                               log-prefix
+                               callback
+                               (File. worker-dir))))))
 
 ;; local implementation
 

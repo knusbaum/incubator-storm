@@ -469,50 +469,50 @@
   (interrupt [this])
   (sleeping? [this]))
 
-;; afn returns amount of time to sleep
-(defnk async-loop [afn
-                   :daemon false
-                   :kill-fn (fn [error] (Utils/exitProcess 1 "Async loop died!"))
-                   :priority Thread/NORM_PRIORITY
-                   :factory? false
-                   :start true
-                   :thread-name nil]
-  (let [thread (Thread.
-                 (fn []
-                   (try-cause
-                     (let [afn (if factory? (afn) afn)]
-                       (loop []
-                         (let [sleep-time (afn)]
-                           (when-not (nil? sleep-time)
-                             (Time/sleepSecs sleep-time)
-                             (recur))
-                           )))
-                     (catch InterruptedException e
-                       (log-message "Async loop interrupted!")
-                       )
-                     (catch Throwable t
-                       (log-error t "Async loop died!")
-                       (kill-fn t)))))]
-    (.setDaemon thread daemon)
-    (.setPriority thread priority)
-    (when thread-name
-      (.setName thread (str (.getName thread) "-" thread-name)))
-    (when start
-      (.start thread))
-    ;; should return object that supports stop, interrupt, join, and waiting?
-    (reify SmartThread
-      (start
-        [this]
-        (.start thread))
-      (join
-        [this]
-        (.join thread))
-      (interrupt
-        [this]
-        (.interrupt thread))
-      (sleeping?
-        [this]
-        (Time/isThreadWaiting thread)))))
+;; ;; afn returns amount of time to sleep
+;; (defnk async-loop [afn
+;;                    :daemon false
+;;                    :kill-fn (fn [error] (Utils/exitProcess 1 "Async loop died!"))
+;;                    :priority Thread/NORM_PRIORITY
+;;                    :factory? false
+;;                    :start true
+;;                    :thread-name nil]
+;;   (let [thread (Thread.
+;;                  (fn []
+;;                    (try-cause
+;;                      (let [afn (if factory? (afn) afn)]
+;;                        (loop []
+;;                          (let [sleep-time (afn)]
+;;                            (when-not (nil? sleep-time)
+;;                              (Time/sleepSecs sleep-time)
+;;                              (recur))
+;;                            )))
+;;                      (catch InterruptedException e
+;;                        (log-message "Async loop interrupted!")
+;;                        )
+;;                      (catch Throwable t
+;;                        (log-error t "Async loop died!")
+;;                        (kill-fn t)))))]
+;;     (.setDaemon thread daemon)
+;;     (.setPriority thread priority)
+;;     (when thread-name
+;;       (.setName thread (str (.getName thread) "-" thread-name)))
+;;     (when start
+;;       (.start thread))
+;;     ;; should return object that supports stop, interrupt, join, and waiting?
+;;     (reify SmartThread
+;;       (start
+;;         [this]
+;;         (.start thread))
+;;       (join
+;;         [this]
+;;         (.join thread))
+;;       (interrupt
+;;         [this]
+;;         (.interrupt thread))
+;;       (sleeping?
+;;         [this]
+;;         (Time/isThreadWaiting thread)))))
 
 ;(defn shell-cmd
 ;  [command]
@@ -526,36 +526,36 @@
 ;(defn container-file-path [dir]
 ;  (str dir Utils/filePathSeparator "launch_container.sh"))
 
-(defnk write-script
-  [dir command :environment {}]
-  (let [script-src (str "#!/bin/bash\n" (clojure.string/join "" (map (fn [[k v]] (str (Utils/shellCmd ["export" (str k "=" v)]) ";\n")) environment)) "\nexec " (Utils/shellCmd command) ";")
-        script-path (Utils/scriptFilePath dir)
-        _ (spit script-path script-src)]
-    script-path
-  ))
+;; (defnk write-script
+;;   [dir command :environment {}]
+;;   (let [script-src (str "#!/bin/bash\n" (clojure.string/join "" (map (fn [[k v]] (str (Utils/shellCmd ["export" (str k "=" v)]) ";\n")) environment)) "\nexec " (Utils/shellCmd command) ";")
+;;         script-path (Utils/scriptFilePath dir)
+;;         _ (spit script-path script-src)]
+;;     script-path
+;;   ))
 
-(defnk launch-process
-  [command :environment {} :log-prefix nil :exit-code-callback nil :directory nil]
-  (let [builder (ProcessBuilder. command)
-        process-env (.environment builder)]
-    (when directory (.directory builder directory))
-    (.redirectErrorStream builder true)
-    (doseq [[k v] environment]
-      (.put process-env k v))
-    (let [process (.start builder)]
-      (if (or log-prefix exit-code-callback)
-        (async-loop
-         (fn []
-           (if log-prefix
-             (Utils/readAndLogStream log-prefix (.getInputStream process)))
-           (when exit-code-callback
-             (try
-               (.waitFor process)
-               (catch InterruptedException e
-                 (log-message log-prefix " interrupted.")))
-             (exit-code-callback (.exitValue process)))
-           nil)))                    
-      process)))
+;; (defnk launch-process
+;;   [command :environment {} :log-prefix nil :exit-code-callback nil :directory nil]
+;;   (let [builder (ProcessBuilder. command)
+;;         process-env (.environment builder)]
+;;     (when directory (.directory builder directory))
+;;     (.redirectErrorStream builder true)
+;;     (doseq [[k v] environment]
+;;       (.put process-env k v))
+;;     (let [process (.start builder)]
+;;       (if (or log-prefix exit-code-callback)
+;;         (Utils/asyncLoop
+;;          (fn []
+;;            (if log-prefix
+;;              (Utils/readAndLogStream log-prefix (.getInputStream process)))
+;;            (when exit-code-callback
+;;              (try
+;;                (.waitFor process)
+;;                (catch InterruptedException e
+;;                  (log-message log-prefix " interrupted.")))
+;;              (exit-code-callback (.exitValue process)))
+;;            nil)))
+;;       process)))
    
 ;; (defn exists-file?
 ;;   [path]

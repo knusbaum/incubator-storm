@@ -1,4 +1,4 @@
-/** 
+/**
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -22,26 +22,17 @@
  * static methods.
  *
  * To mock static methods in java, we use a singleton. The class to mock must
- * implement:
- * <ul>
- * <li> setInstance static method that accepts an instance of the selfsame
- *      class, or a descendant
- * <li> resetInstance static method that sets the singlton instance to one of
- *      the selfsame class
- * </ul>
+ * implement <code>setInstance</code> static method that accepts an instance of
+ * the selfsame class and returns the previous instance that was set.
  *
  * Example:
  *
  * <code>
  * public class MyClass {
- *     private static final MyClass INSTANCE = new MyClass();
- *
- *     public static void setInstance(MyClass c) {
+ *     public static MyClass setInstance(MyClass c) {
+ *         MyClass oldInstance = _instance;
  *         _instance = c;
- *     }
- *
- *     public static void resetInstance() {
- *         _instance = INSTANCE;
+ *         return oldInstance;
  *     }
  *
  *     // Any method that we wish to mock must delegate to the singleton
@@ -56,20 +47,28 @@
  * }
  * </code>
  *
- * Each class that could be mocked should have a child class defined in this
- * package that sets the instance on construction and implements the close
- * method.
+ * Each class that could be mocked should have an Installer class defined in
+ * this package that sets the instance on construction and implements the
+ * <code>close</code> method of {@link java.lang.AutoCloseable}.
  *
  * Example:
  *
  * <code>
- * class MockedMyClass extends MyClass implementes AutoCloseable {
- *     MockedMyClass() {
- *         MyClass.setInstance(this);
+ * class MyClassInstaller implementes AutoCloseable {
+ *     private MyClass _oldInstance;
+ *     private MyClass _curInstance;
+ *
+ *     MyClassInstaller(MyClass instance) {
+ *         _oldInstance = MyClass.setInstance(instance);
+ *         _curInstance = instance;
  *     }
+ *
  *     @Override
  *     public void close() throws Exception {
- *         MyClass.resetInstance();
+ *        if (MyClass.setInstance(_oldInstance) != _curInstance) {
+ *            throw new IllegalStateException(
+ *                    "Instances of this resource must be closed in reverse order of opening.");
+ *        }
  *     }
  * }
  * </code>
@@ -78,14 +77,15 @@
  * implements the close method, and use try-with-resources. For example:
  *
  * <code>
- * MockedMyClass mock = new MockedMyClass() { 
+ * MyClass mock = new MyClass() {
  *         protected int mockableFunctionImpl(String arg) { return 42; }
  *         };
+ *
  * try(mock) {
  *     AssertEqual(42, MyClass.mockableFunction("not 42 characters"));
  * };
  * </code>
- * 
+ *
  *
  * The resulting code remains thread-unsafe.
  *

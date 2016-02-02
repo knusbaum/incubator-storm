@@ -77,12 +77,10 @@
   (.haltWithInterrupt queue))
 
 (defnk consume-loop*
-  [^DisruptorQueue queue handler
-   :kill-fn (fn [error] (Utils/exitProcess 1 "Async loop died!"))]
-  (async-loop
+  [^DisruptorQueue queue handler]
+  (Utils/asyncLoop
           (fn [] (consume-batch-when-available queue handler) 0)
-          :kill-fn kill-fn
-          :thread-name (.getName queue)))
+          (.getName queue)))
 
 (defmacro consume-loop [queue & handler-args]
   `(let [handler# (handler ~@handler-args)]

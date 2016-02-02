@@ -36,8 +36,9 @@
   (:import [org.apache.storm Config Constants])
   (:import [org.apache.storm.cluster ClusterStateContext DaemonType])
   (:import [org.apache.storm.grouping LoadAwareCustomStreamGrouping LoadAwareShuffleGrouping LoadMapping ShuffleGrouping])
-  (:import [java.util.concurrent ConcurrentLinkedQueue]
-           (org.json.simple JSONValue))
+  (:import [java.lang Thread Thread$UncaughtExceptionHandler]
+           [java.util.concurrent ConcurrentLinkedQueue]
+           [org.json.simple JSONValue])
   (:require [org.apache.storm [thrift :as thrift]
              [cluster :as cluster] [disruptor :as disruptor] [stats :as stats]])
   (:require [org.apache.storm.daemon [task :as task]])
@@ -265,13 +266,16 @@
      :task->component (:task->component worker)
      :stream->component->grouper (outbound-components worker-context component-id storm-conf)
      :report-error (throttled-report-error-fn <>)
-     :report-error-and-die (fn [error]
-                             ((:report-error <>) error)
-                             (if (or
-                                   (Utils/exceptionCauseIsInstanceOf InterruptedException error)
-                                   (Utils/exceptionCauseIsInstanceOf java.io.InterruptedIOException error))
-                               (log-message "Got interrupted excpetion shutting thread down...")
-                               ((:suicide-fn <>))))
+     :report-error-and-die (reify
+                             Thread$UncaughtExceptionHandler
+                             (uncaughtException [this _ error]
+                               (fn [error]
+                                 ((:report-error <>) error)
+                                 (if (or
+                                       (Utils/exceptionCauseIsInstanceOf InterruptedException error)
+                                       (Utils/exceptionCauseIsInstanceOf java.io.InterruptedIOException error))
+                                   (log-message "Got interrupted excpetion shutting thread down...")
+                                   ((:suicide-fn <>))))))
      :sampler (mk-stats-sampler storm-conf)
      :backpressure (atom false)
      :spout-throttling-metrics (if (= executor-type :spout) 
@@ -543,7 +547,7 @@
         emitted-count (MutableLong. 0)
         empty-emit-streak (MutableLong. 0)]
    
-    [(async-loop
+    [(Utils/asyncLoop
       (fn []
         ;; If topology was started in inactive state, don't call (.open spout) until it's activated first.
         (while (not @(:storm-active-atom executor-data))
@@ -664,9 +668,12 @@
               (.set empty-emit-streak 0)
               ))
           0))
-      :kill-fn (:report-error-and-die executor-data)
-      :factory? true
-      :thread-name (str component-id "-executor" (:executor-id executor-data)))]))
+      false ; isDaemon
+      (:report-error-and-die executor-data)
+      Thread/NORM_PRIORITY
+      true ; isFactory
+      true ; startImmediately
+      (str component-id "-executor" (:executor-id executor-data)))]))
 
 (defn- tuple-time-delta! [^TupleImpl tuple]
   (let [ms (.getProcessSampleStartTime tuple)]
@@ -741,7 +748,7 @@
     
     ;; TODO: can get any SubscribedState objects out of the context now
 
-    [(async-loop
+    [(Utils/asyncLoop
       (fn []
         ;; If topology was started in inactive state, don't call prepare bolt until it's activated first.
         (while (not @(:storm-active-atom executor-data))          
@@ -843,9 +850,12 @@
           (fn []            
             (disruptor/consume-batch-when-available receive-queue event-handler)
             0)))
-      :kill-fn (:report-error-and-die executor-data)
-      :factory? true
-      :thread-name (str component-id "-executor" (:executor-id executor-data)))]))
+      false ; isDaemon
+      (:report-error-and-die executor-data)
+      Thread/NORM_PRIORITY
+      true ; isFactory
+      true ; startImmediately
+      (str component-id "-executor" (:executor-id executor-data)))]))
 
 (defmethod close-component :spout [executor-data spout]
   (.close spout))

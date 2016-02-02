@@ -24,7 +24,7 @@
         [org.apache.storm.ui helpers])
   (:import [org.apache.storm.daemon DirectoryCleaner]
            [org.apache.storm.utils Utils]
-           [org.apache.storm.utils.staticmocking MockedUtils])
+           [org.apache.storm.utils.staticmocking UtilsInstaller])
   (:import [java.nio.file Files Path DirectoryStream])
   (:import [java.nio.file Files])
   (:import [java.nio.file.attribute FileAttribute])
@@ -128,7 +128,8 @@
 
 (deftest test-per-workerdir-cleanup!
   (testing "cleaner deletes oldest files in each worker dir if files are larger than per-dir quota."
-    (with-open [_ (proxy [MockedUtils] [] (forceDeleteImpl [path]))]
+    (with-open [_ (UtilsInstaller. (proxy [Utils] []
+                                     (forceDeleteImpl [path])))]
       (let [cleaner (proxy [org.apache.storm.daemon.DirectoryCleaner] []
                       (getStreamForDirectory
                         ([^File dir]
@@ -180,7 +181,8 @@
 (deftest test-global-log-cleanup!
   (testing "cleaner deletes oldest when files' sizes are larger than the global quota."
     (stubbing [logviewer/get-alive-worker-dirs ["/workers-artifacts/topo1/port1"]]
-              (with-open [_ (proxy [MockedUtils] [] (forceDeleteImpl [path]))]
+              (with-open [_ (UtilsInstaller. (proxy [Utils] []
+                                               (forceDeleteImpl [path])))]
                 (let [cleaner (proxy [org.apache.storm.daemon.DirectoryCleaner] []
                                 (getStreamForDirectory
                                   ([^File dir]
@@ -259,10 +261,10 @@
     (let [mockfile1 (mk-mock-File {:name "delete-me1" :type :file})
           mockfile2 (mk-mock-File {:name "delete-me2" :type :file})
           forceDelete-args (atom [])
-          mockUtils (proxy [MockedUtils] []
-                      (forceDeleteImpl [path]
-                        (swap! forceDelete-args conj path)))]
-      (with-open [_ mockUtils]
+          utils-proxy (proxy [Utils] []
+                        (forceDeleteImpl [path]
+                          (swap! forceDelete-args conj path)))]
+      (with-open [_ (UtilsInstaller. utils-proxy)]
         (stubbing [logviewer/select-dirs-for-cleanup nil
                    logviewer/get-dead-worker-dirs (sorted-set mockfile1 mockfile2)
                    logviewer/cleanup-empty-topodir! nil]
@@ -367,10 +369,9 @@
         ;; match.
         exp-offset-fn #(- (/ logviewer/default-bytes-per-page 2) %)]
 
-    ;(stubbing [local-hostname expected-host
     (stubbing [logviewer/logviewer-port expected-port]
-      (with-open [_ (proxy [MockedUtils] []
-                      (localHostnameImpl [] expected-host))]
+      (with-open [_ (UtilsInstaller. (proxy [Utils] []
+                                       (localHostnameImpl [] expected-host)))]
         (testing "Logviewer link centers the match in the page"
           (let [expected-fname "foobar.log"]
             (is (= (str "http://"

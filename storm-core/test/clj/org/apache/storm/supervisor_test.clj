@@ -23,12 +23,14 @@
   (:import [org.apache.storm.scheduler ISupervisor])
   (:import [org.apache.storm.utils ConfigUtils])
   (:import [org.apache.storm.generated RebalanceOptions])
-  (:import [org.apache.storm.testing.staticmocking MockedConfigUtils])
+  (:import [org.mockito ArgumentCaptor]
+           [org.mockito Matchers Mockito])
   (:import [java.util UUID])
   (:import [java.io File])
   (:import [java.nio.file Files])
   (:import [org.apache.storm.utils Utils IPredicate]
-           [org.apache.storm.utils.staticmocking MockedUtils])
+           [org.apache.storm.utils.staticmocking UtilsInstaller
+                                                 ConfigUtilsInstaller])
   (:import [java.nio.file.attribute FileAttribute])
   (:use [org.apache.storm config testing util timer log])
   (:use [org.apache.storm.daemon common])
@@ -336,27 +338,35 @@
               mock-supervisor {:conf {STORM-CLUSTER-MODE :distributed
                                       WORKER-CHILDOPTS string-opts}}
               mocked-supervisor-storm-conf {TOPOLOGY-WORKER-CHILDOPTS
-                                            topo-string-opts}]
-          (with-open [_ (proxy [MockedUtils] []
-                          (addToClasspathImpl [classpath paths] mock-cp))
-                      _ (proxy [MockedConfigUtils] []
+                                            topo-string-opts}
+              utils-spy (->>
+                          (proxy [Utils] []
+                            (addToClasspathImpl [classpath paths] mock-cp)
+                            (launchProcessImpl [& _] nil))
+                          Mockito/spy)
+              cu-proxy (proxy [ConfigUtils] []
                           (supervisorStormDistRootImpl ([conf] nil)
                                                        ([conf storm-id] nil))
                           (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
                           (setWorkerUserWSEImpl [conf worker-id user] nil)
                           (workerArtifactsRootImpl [conf] "/tmp/workers-artifacts"))]
-              (stubbing [launch-process nil
-                     supervisor/jlp nil
-                     supervisor/write-log-metadata! nil
-                     supervisor/create-blobstore-links nil]
+          (with-open [_ (ConfigUtilsInstaller. cu-proxy)
+                      _ (UtilsInstaller. utils-spy)]
+              (stubbing [supervisor/jlp nil
+                         supervisor/write-log-metadata! nil
+                         supervisor/create-blobstore-links nil]
                 (supervisor/launch-worker mock-supervisor
                                       mock-storm-id
                                       mock-port
                                       mock-worker-id
                                       mock-mem-onheap)
-                (verify-first-call-args-for-indices launch-process
-                                                [0]
-                                                exp-args)))))
+                (. (Mockito/verify utils-spy)
+                   (launchProcessImpl (Matchers/eq exp-args)
+                                      (Matchers/any)
+                                      (Matchers/any)
+                                      (Matchers/any)
+                                      (Matchers/any)))))))
+
       (testing "testing *.worker.childopts as list of strings, with spaces in values"
         (let [list-opts '("-Dopt1='this has a space in it'" "-Xmx1024m")
               topo-list-opts '("-Dopt2='val with spaces'" "-Xmx2048m")
@@ -364,80 +374,102 @@
               mock-supervisor {:conf {STORM-CLUSTER-MODE :distributed
                                       WORKER-CHILDOPTS list-opts}}
               mocked-supervisor-storm-conf {TOPOLOGY-WORKER-CHILDOPTS
-                                            topo-list-opts}]
-            (with-open [_ (proxy [MockedUtils] []
-                            (addToClasspathImpl [classpath paths] mock-cp))
-                        _ (proxy [MockedConfigUtils] []
-                            (supervisorStormDistRootImpl ([conf] nil)
-                                                         ([conf storm-id] nil))
-                            (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
-                            (setWorkerUserWSEImpl [conf worker-id user] nil)
-                            (workerArtifactsRootImpl [conf] "/tmp/workers-artifacts"))]
-                (stubbing [launch-process nil
-                     supervisor/jlp nil
-                     supervisor/write-log-metadata! nil
-                     supervisor/create-blobstore-links nil]
-                (supervisor/launch-worker mock-supervisor
-                                      mock-storm-id
-                                      mock-port
-                                      mock-worker-id
-                                      mock-mem-onheap)
-                (verify-first-call-args-for-indices launch-process
-                                                [0]
-                                                exp-args)))))
-      (testing "testing topology.classpath is added to classpath"
-        (let [topo-cp (str Utils/filePathSeparator "any" Utils/filePathSeparator "path")
-              exp-args (exp-args-fn [] [] (Utils/addToClasspath mock-cp [topo-cp]))
-              mock-supervisor {:conf {STORM-CLUSTER-MODE :distributed}}
-              mocked-supervisor-storm-conf {TOPOLOGY-CLASSPATH topo-cp}]
-          (with-open [_ (proxy [MockedUtils] []
-                          (currentClasspathImpl []
-                            (str Utils/filePathSeparator "base")))
-                      _ (proxy [MockedConfigUtils] []
+                                            topo-list-opts}
+              cu-proxy (proxy [ConfigUtils] []
                           (supervisorStormDistRootImpl ([conf] nil)
                                                        ([conf storm-id] nil))
                           (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
                           (setWorkerUserWSEImpl [conf worker-id user] nil)
-                          (workerArtifactsRootImpl [conf] "/tmp/workers-artifacts"))]
+                          (workerArtifactsRootImpl [conf] "/tmp/workers-artifacts"))
+              utils-spy (->>
+                          (proxy [Utils] []
+                            (addToClasspathImpl [classpath paths] mock-cp)
+                            (launchProcessImpl [& _] nil))
+                          Mockito/spy)]
+            (with-open [_ (ConfigUtilsInstaller. cu-proxy)
+                        _ (UtilsInstaller. utils-spy)]
+                (stubbing [supervisor/jlp nil
+                           supervisor/write-log-metadata! nil
+                           supervisor/create-blobstore-links nil]
+                  (supervisor/launch-worker mock-supervisor
+                                            mock-storm-id
+                                            mock-port
+                                            mock-worker-id
+                                            mock-mem-onheap)
+                  (. (Mockito/verify utils-spy)
+                     (launchProcessImpl (Matchers/eq exp-args)
+                                        (Matchers/any)
+                                        (Matchers/any)
+                                        (Matchers/any)
+                                        (Matchers/any)))))))
+
+      (testing "testing topology.classpath is added to classpath"
+        (let [topo-cp (str Utils/filePathSeparator "any" Utils/filePathSeparator "path")
+              exp-args (exp-args-fn [] [] (Utils/addToClasspath mock-cp [topo-cp]))
+              mock-supervisor {:conf {STORM-CLUSTER-MODE :distributed}}
+              mocked-supervisor-storm-conf {TOPOLOGY-CLASSPATH topo-cp}
+              cu-proxy (proxy [ConfigUtils] []
+                          (supervisorStormDistRootImpl ([conf] nil)
+                                                       ([conf storm-id] nil))
+                          (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
+                          (setWorkerUserWSEImpl [conf worker-id user] nil)
+                          (workerArtifactsRootImpl [conf] "/tmp/workers-artifacts"))
+              utils-spy (->>
+                          (proxy [Utils] []
+                            (currentClasspathImpl []
+                              (str Utils/filePathSeparator "base"))
+                            (launchProcessImpl [& _] nil))
+                          Mockito/spy)]
+          (with-open [_ (ConfigUtilsInstaller. cu-proxy)
+                      _ (UtilsInstaller. utils-spy)]
                 (stubbing [supervisor/jlp nil
                      supervisor/write-log-metadata! nil
-                     launch-process nil
                      supervisor/create-blobstore-links nil]
-                    (supervisor/launch-worker mock-supervisor
+                  (supervisor/launch-worker mock-supervisor
                                               mock-storm-id
                                               mock-port
                                               mock-worker-id
                                               mock-mem-onheap)
-                    (verify-first-call-args-for-indices launch-process
-                                                        [0]
-                                                        exp-args)))))
+                  (. (Mockito/verify utils-spy)
+                     (launchProcessImpl (Matchers/eq exp-args)
+                                        (Matchers/any)
+                                        (Matchers/any)
+                                        (Matchers/any)
+                                        (Matchers/any)))))))
       (testing "testing topology.environment is added to environment for worker launch"
         (let [topo-env {"THISVAR" "somevalue" "THATVAR" "someothervalue"}
               full-env (merge topo-env {"LD_LIBRARY_PATH" nil})
               exp-args (exp-args-fn [] [] mock-cp)
               mock-supervisor {:conf {STORM-CLUSTER-MODE :distributed}}
-              mocked-supervisor-storm-conf {TOPOLOGY-ENVIRONMENT topo-env}]
-          (with-open [_ (proxy [MockedUtils] []
-                          (currentClasspathImpl []
-                            (str Utils/filePathSeparator "base")))
-                      _ (proxy [MockedConfigUtils] []
+              mocked-supervisor-storm-conf {TOPOLOGY-ENVIRONMENT topo-env}
+              cu-proxy (proxy [ConfigUtils] []
                           (supervisorStormDistRootImpl ([conf] nil)
                                                        ([conf storm-id] nil))
                           (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
                           (setWorkerUserWSEImpl [conf worker-id user] nil)
-                          (workerArtifactsRootImpl [conf] "/tmp/workers-artifacts"))]
+                          (workerArtifactsRootImpl [conf] "/tmp/workers-artifacts"))
+              utils-spy (->>
+                          (proxy [Utils] []
+                            (currentClasspathImpl []
+                              (str Utils/filePathSeparator "base"))
+                            (launchProcessImpl [& _] nil))
+                          Mockito/spy)]
+          (with-open [_ (ConfigUtilsInstaller. cu-proxy)
+                      _ (UtilsInstaller. utils-spy)]
             (stubbing [supervisor/jlp nil
-                     launch-process nil
-                     supervisor/write-log-metadata! nil
-                     supervisor/create-blobstore-links nil]
-                    (supervisor/launch-worker mock-supervisor
-                                              mock-storm-id
-                                              mock-port
-                                              mock-worker-id
-                                              mock-mem-onheap)
-                    (verify-first-call-args-for-indices launch-process
-                                                        [2]
-                                                        full-env))))))))
+                       supervisor/write-log-metadata! nil
+                       supervisor/create-blobstore-links nil]
+              (supervisor/launch-worker mock-supervisor
+                                        mock-storm-id
+                                        mock-port
+                                        mock-worker-id
+                                        mock-mem-onheap)
+              (. (Mockito/verify utils-spy)
+                 (launchProcessImpl (Matchers/any)
+                                    (Matchers/eq full-env)
+                                    (Matchers/any)
+                                    (Matchers/any)
+                                    (Matchers/any))))))))))
 
 (deftest test-worker-launch-command-run-as-user
   (testing "*.worker.childopts configuration"
@@ -503,26 +535,33 @@
                                         WORKER-CHILDOPTS string-opts}}
                 mocked-supervisor-storm-conf {TOPOLOGY-WORKER-CHILDOPTS
                                               topo-string-opts
-                                              TOPOLOGY-SUBMITTER-USER "me"}]
-            (with-open [_ (proxy [MockedUtils] []
-                            (addToClasspathImpl [classpath paths] mock-cp))
-                        _ (proxy [MockedConfigUtils] []
-                            (supervisorStormDistRootImpl ([conf] nil)
-                                                         ([conf storm-id] nil))
-                            (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
-                            (setWorkerUserWSEImpl [conf worker-id user] nil))]
-              (stubbing [launch-process nil
-                       supervisor/java-cmd "java"
-                       supervisor/jlp nil
-                       supervisor/write-log-metadata! nil]
-                      (supervisor/launch-worker mock-supervisor
-                                                mock-storm-id
-                                                mock-port
-                                                mock-worker-id
-                                                mock-mem-onheap)
-                      (verify-first-call-args-for-indices launch-process
-                                                          [0]
-                                                          exp-launch)))
+                                              TOPOLOGY-SUBMITTER-USER "me"}
+                cu-proxy (proxy [ConfigUtils] []
+                          (supervisorStormDistRootImpl ([conf] nil)
+                                                       ([conf storm-id] nil))
+                          (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
+                          (setWorkerUserWSEImpl [conf worker-id user] nil))
+                utils-spy (->>
+                            (proxy [Utils] []
+                              (addToClasspathImpl [classpath paths] mock-cp)
+                              (launchProcessImpl [& _] nil))
+                            Mockito/spy)]
+            (with-open [_ (ConfigUtilsInstaller. cu-proxy)
+                        _ (UtilsInstaller. utils-spy)]
+              (stubbing [supervisor/java-cmd "java"
+                         supervisor/jlp nil
+                         supervisor/write-log-metadata! nil]
+                (supervisor/launch-worker mock-supervisor
+                                          mock-storm-id
+                                          mock-port
+                                          mock-worker-id
+                                          mock-mem-onheap)
+                (. (Mockito/verify utils-spy)
+                   (launchProcessImpl (Matchers/eq exp-launch)
+                                      (Matchers/any)
+                                      (Matchers/any)
+                                      (Matchers/any)
+                                      (Matchers/any)))))
             (is (= (slurp worker-script) exp-script))))
         (finally (Utils/forceDelete storm-local)))
       (.mkdirs (io/file storm-local "workers" mock-worker-id))
@@ -538,26 +577,33 @@
                                         WORKER-CHILDOPTS list-opts}}
                                         mocked-supervisor-storm-conf {TOPOLOGY-WORKER-CHILDOPTS
                                                                       topo-list-opts
-                                                                      TOPOLOGY-SUBMITTER-USER "me"}]
-            (with-open [_ (proxy [MockedUtils] []
-                            (addToClasspathImpl [classpath paths] mock-cp))
-                        _ (proxy [MockedConfigUtils] []
-                            (supervisorStormDistRootImpl ([conf] nil)
-                              ([conf storm-id] nil))
-                            (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
-                            (setWorkerUserWSEImpl [conf worker-id user] nil))]
-              (stubbing [launch-process nil
-                       supervisor/java-cmd "java"
-                       supervisor/jlp nil
-                       supervisor/write-log-metadata! nil]
-                      (supervisor/launch-worker mock-supervisor
-                                                mock-storm-id
-                                                mock-port
-                                                mock-worker-id
-                                                mock-mem-onheap)
-                      (verify-first-call-args-for-indices launch-process
-                                                          [0]
-                                                          exp-launch)))
+                                                                      TOPOLOGY-SUBMITTER-USER "me"}
+                cu-proxy (proxy [ConfigUtils] []
+                          (supervisorStormDistRootImpl ([conf] nil)
+                                                       ([conf storm-id] nil))
+                          (readSupervisorStormConfImpl [conf storm-id] mocked-supervisor-storm-conf)
+                          (setWorkerUserWSEImpl [conf worker-id user] nil))
+                utils-spy (->>
+                            (proxy [Utils] []
+                              (addToClasspathImpl [classpath paths] mock-cp)
+                              (launchProcessImpl [& _] nil))
+                            Mockito/spy)]
+            (with-open [_ (ConfigUtilsInstaller. cu-proxy)
+                        _ (UtilsInstaller. utils-spy)]
+              (stubbing [supervisor/java-cmd "java"
+                         supervisor/jlp nil
+                         supervisor/write-log-metadata! nil]
+                (supervisor/launch-worker mock-supervisor
+                                          mock-storm-id
+                                          mock-port
+                                          mock-worker-id
+                                          mock-mem-onheap)
+                (. (Mockito/verify utils-spy)
+                 (launchProcessImpl (Matchers/eq exp-launch)
+                                    (Matchers/any)
+                                    (Matchers/any)
+                                    (Matchers/any)
+                                    (Matchers/any)))))
             (is (= (slurp worker-script) exp-script))))
         (finally (Utils/forceDelete storm-local))))))
 
@@ -586,21 +632,20 @@
           expected-acls supervisor/SUPERVISOR-ZK-ACLS
           fake-isupervisor (reify ISupervisor
                              (getSupervisorId [this] nil)
-                             (getAssignmentId [this] nil))]
-      (with-open [_ (proxy [MockedConfigUtils] []
-                      (supervisorStateImpl [conf] nil)
-                      (supervisorLocalDirImpl [conf] nil))]
+                             (getAssignmentId [this] nil))
+          fake-cu (proxy [ConfigUtils] []
+                    (supervisorStateImpl [conf] nil)
+                    (supervisorLocalDirImpl [conf] nil))
+          fake-utils (proxy [Utils] [] (localHostnameImpl [] nil))]
+      (with-open [_ (ConfigUtilsInstaller. fake-cu)
+                  _ (UtilsInstaller. fake-utils)]
         (stubbing [uptime-computer nil
                    cluster/mk-storm-cluster-state nil
-;                   supervisor-state nil
-                   mk-timer nil
-;                   supervisor-local-dir nil
-                   ]
-          (with-open [- (proxy [MockedUtils] [] (localHostnameImpl [] nil))]
-            (supervisor/supervisor-data auth-conf nil fake-isupervisor)
-            (verify-call-times-for cluster/mk-storm-cluster-state 1)
-            (verify-first-call-args-for-indices cluster/mk-storm-cluster-state [2]
-              expected-acls))))))
+                   mk-timer nil]
+          (supervisor/supervisor-data auth-conf nil fake-isupervisor)
+          (verify-call-times-for cluster/mk-storm-cluster-state 1)
+          (verify-first-call-args-for-indices cluster/mk-storm-cluster-state [2]
+              expected-acls)))))
 
   (deftest test-write-log-metadata
     (testing "supervisor writes correct data to logs metadata file"
@@ -628,10 +673,12 @@
 
   (deftest test-worker-launcher-requires-user
     (testing "worker-launcher throws on blank user"
-      (mocking [launch-process]
-        (is (thrown-cause-with-msg? java.lang.IllegalArgumentException
-              #"(?i).*user cannot be blank.*"
-              (supervisor/worker-launcher {} nil ""))))))
+      (let [utils-proxy (proxy [Utils] []
+                          (launchProcessImpl [& _] nil))]
+        (with-open [_ (UtilsInstaller. utils-proxy)]
+          (is (thrown-cause-with-msg? java.lang.IllegalArgumentException
+                #"(?i).*user cannot be blank.*"
+                (supervisor/worker-launcher {} nil "")))))))
 
   (defn found? [sub-str input-str]
     (if (string? input-str)
