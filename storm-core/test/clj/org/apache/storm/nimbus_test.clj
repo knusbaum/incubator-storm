@@ -102,7 +102,8 @@
          set         
          )))
 
-;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
+;TODO: when translating this function, don't call map-val, but instead use an inline for loop.
+; map-val is a temporary kluge for clojure.
 (defn topology-node-distribution [state storm-name]
   (let [storm-id (get-storm-id state storm-name)
         assignment (.assignment-info state storm-id nil)]

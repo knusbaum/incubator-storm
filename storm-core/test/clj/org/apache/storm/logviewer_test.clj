@@ -367,7 +367,6 @@
         ;; match.
         exp-offset-fn #(- (/ logviewer/default-bytes-per-page 2) %)]
 
-    ;(stubbing [local-hostname expected-host
     (stubbing [logviewer/logviewer-port expected-port]
       (with-open [_ (proxy [MockedUtils] []
                       (localHostnameImpl [] expected-host))]
