@@ -36,7 +36,8 @@
   (:use [org.apache.storm.daemon common])
   (:use [org.apache.storm testing])
   (:import [org.apache.storm.generated Nimbus Nimbus$Client Nimbus$Iface StormTopology SubmitOptions
-            KillOptions RebalanceOptions ClusterSummary TopologyInfo Nimbus$Processor] (org.json.simple JSONValue))
+            KillOptions RebalanceOptions ClusterSummary TopologyInfo Nimbus$Processor]
+           (org.json.simple JSONValue)))
 
 (defn mk-principal [name]
   (reify Principal
