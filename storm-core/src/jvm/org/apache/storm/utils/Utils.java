@@ -114,6 +114,8 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import java.security.Principal;
+import org.apache.storm.logging.ThriftAccessLogger;
 
 public class Utils {
     // A singleton instance allows us to mock delegated static methods in our
@@ -158,6 +160,7 @@ public class Utils {
 
     public static Object newInstance(String klass) {
         try {
+            LOG.info("Creating new instance for class {}", klass);
             return newInstance(Class.forName(klass));
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -165,11 +168,13 @@ public class Utils {
     }
 
     public static Object newInstance(Class klass) {
-        return _instance.newInstance(klass);
+        LOG.info("Inside other newInstance static method.");
+        return _instance.newInstanceImpl(klass);
     }
 
     public Object newInstanceImpl(Class klass) {
         try {
+            LOG.info("Returning {}.newInstance()", klass);
             return klass.newInstance();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -504,7 +509,11 @@ public class Utils {
         HashMap nconf = new HashMap(conf);
         // only enable cleanup of blobstore on nimbus
         nconf.put(Config.BLOBSTORE_CLEANUP_ENABLE, Boolean.TRUE);
-        store.prepare(nconf, baseDir, nimbusInfo);
+
+        if(store != null) {
+            // store can be null during testing when mocking utils.
+            store.prepare(nconf, baseDir, nimbusInfo);
+        }
         return store;
     }
 
@@ -1566,6 +1575,82 @@ public class Utils {
 //        return it != null && it.hasNext();
 //    }
 
+    public static final Pattern workerLogFilenamePattern = Pattern.compile("^worker.log(.*)");
+
+    public static Object getConfiguredClass(Map conf, Object configKey) {
+        if (conf.containsKey(configKey)) {
+            return newInstance((String)conf.get(configKey));
+        }
+        return null;
+    }
+
+    public static String logsFilename(String stormId, int port) {
+        return stormId + filePathSeparator + Integer.toString(port) + filePathSeparator + "worker.log";
+    }
+
+    public static String eventLogsFilename(String stormId, int port) {
+        return stormId + filePathSeparator + Integer.toString(port) + filePathSeparator + "events.log";
+    }
+
+    public static Object readYamlFile(String yamlFile) {
+        try (FileReader reader = new FileReader(yamlFile)) {
+            return new Yaml(new SafeConstructor()).load(reader);
+        }
+        catch(Exception ex) {
+            LOG.error("Failed to read yaml file.", ex);
+        }
+        return null;
+    }
+
+    public static void setupDefaultUncaughtExceptionHandler() {
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                public void uncaughtException(Thread thread, Throwable thrown) {
+                    try {
+                        handleUncaughtException(thrown);
+                    }
+                    catch (Error err) {
+                        LOG.error("Received error in main thread.. terminating server...", err);
+                        Runtime.getRuntime().exit(-2);
+                    }
+                }
+            });
+    }
+
+    public static Map redactValue(Map<Object, String> m, Object key) {
+        
+        if(m.containsKey(key)) {
+            HashMap<Object, String> newMap = new HashMap<>(m);
+            String value = newMap.get(key);
+            String redacted = new String(new char[value.length()]).replace("\0", "#");
+            newMap.put(key, redacted);
+            return newMap;
+        }
+        return m;
+    }
+
+    public static void logThriftAccess(Integer requestId, InetAddress remoteAddress, Principal principal, String operation) {
+        new ThriftAccessLogger().log(
+            String.format("Request ID: {} access from: {} principal: {} operation: {}",
+                          requestId, remoteAddress, principal, operation));
+    }
+
+    public static void validateKeyName(String name) {
+        Set<String> disallowedKeys = new HashSet<>();
+        disallowedKeys.add("/");
+        disallowedKeys.add(".");
+        disallowedKeys.add(":");
+        disallowedKeys.add("\\");
+
+        for(String key : disallowedKeys) {
+            if( name.contains(key) ) {
+                throw new RuntimeException("Key name cannot contain any of the following: " + disallowedKeys.toString());
+            }
+        }
+        if(name.trim().isEmpty()) {
+            throw new RuntimeException("Key name cannot be blank");
+        }
+    }
+    
     //Everything from here on is translated from the old util.clj (storm-core/src/clj/backtype.storm/util.clj)
 
     //Wraps an exception in a RuntimeException if needed

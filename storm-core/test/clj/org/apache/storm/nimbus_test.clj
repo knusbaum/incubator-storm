@@ -23,7 +23,8 @@
            [org.apache.storm.nimbus InMemoryTopologyActionNotifier])
   (:import [org.apache.storm.scheduler INimbus])
   (:import [org.apache.storm.nimbus ILeaderElector NimbusInfo])
-  (:import [org.apache.storm.testing.staticmocking MockedConfigUtils])
+  (:import [org.apache.storm.testing.staticmocking MockedConfigUtils]
+           [org.apache.storm.utils.staticmocking MockedUtils])
   (:import [org.apache.storm.generated Credentials NotAliveException SubmitOptions
             TopologyInitialStatus TopologyStatus AlreadyAliveException KillOptions RebalanceOptions
             InvalidTopologyException AuthorizationException

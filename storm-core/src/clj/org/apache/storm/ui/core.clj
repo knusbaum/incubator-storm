@@ -145,10 +145,10 @@
 
 (defn event-log-link
   [topology-id component-id host port secure?]
-  (logviewer-link host (event-logs-filename topology-id port) secure?))
+  (logviewer-link host (Utils/eventLogsFilename topology-id port) secure?))
 
 (defn worker-log-link [host port topology-id secure?]
-  (let [fname (logs-filename topology-id port)]
+  (let [fname (Utils/logsFilename topology-id port)]
     (logviewer-link host fname secure?)))
 
 (defn nimbus-log-link [host]

@@ -35,7 +35,6 @@
   (:import [java.lang.management ManagementFactory])
   (:import [org.apache.commons.exec DefaultExecutor CommandLine])
   (:import [org.apache.commons.io FileUtils])
-  (:import [org.apache.storm.logging ThriftAccessLogger])
   (:import [org.apache.commons.exec ExecuteException])
   (:import [org.json.simple JSONValue])
   (:import [org.yaml.snakeyaml Yaml]
@@ -885,53 +884,8 @@
   (log-message prefix ": " val)
   val)
 
-<<<<<<< HEAD
 ;; The following two will go away when worker, task, executor go away.
 (defn assoc-apply-self [curr key afn]
-=======
-(defn zip-contains-dir?
-  [zipfile target]
-  (let [entries (->> zipfile (ZipFile.) .entries enumeration-seq (map (memfn getName)))]
-    (boolean (some #(.startsWith % (str target "/")) entries))))
-
-(defn url-encode
-  [s]
-  (codec/url-encode s))
-
-(defn url-decode
-  [s]
-  (codec/url-decode s))
-
-(defn join-maps
-  [& maps]
-  (let [all-keys (apply set/union (for [m maps] (-> m keys set)))]
-    (into {} (for [k all-keys]
-               [k (for [m maps] (m k))]))))
-
-(defn partition-fixed
-  [max-num-chunks aseq]
-  (if (zero? max-num-chunks)
-    []
-    (let [chunks (->> (Utils/integerDivided (count aseq) max-num-chunks)
-                      clojurify-structure
-                      (#(dissoc % 0))
-                      (sort-by (comp - first))
-                      (mapcat (fn [[size amt]] (repeat amt size)))
-                      )]
-      (loop [result []
-             [chunk & rest-chunks] chunks
-             data aseq]
-        (if (nil? chunk)
-          result
-          (let [[c rest-data] (split-at chunk data)]
-            (recur (conj result c)
-                   rest-chunks
-                   rest-data)))))))
-
-
-(defn assoc-apply-self
-  [curr key afn]
->>>>>>> c7c0a105e68c688a65890ec3a4b28295c1238119
   (assoc curr key (afn curr)))
 
 (defmacro recursive-map
@@ -940,7 +894,7 @@
          (map (fn [[key form]] `(assoc-apply-self ~key (fn [~'<>] ~form))))
          (concat `(-> {}))))
 
-; These four following will go away later. To be replaced by native java loops.
+; These six following will go away later. To be replaced by native java loops.
 (defmacro fast-list-iter
   [pairs & body]
   (let [pairs (partition 2 pairs)
@@ -987,10 +941,6 @@
         (.add curr e)))
     ret))
 
-(defn get-configured-class
-  [conf config-key]
-  (if (.get conf config-key) (Utils/newInstance (.get conf config-key)) nil))
-
 (defmacro -<>
   ([x] x)
   ([x form] (if (seq? form)
@@ -1001,75 +951,6 @@
               (list form x)))
   ([x form & more] `(-<> (-<> ~x ~form) ~@more)))
 
-(defn logs-filename
-  [storm-id port]
-  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "worker.log"))
-
-(def worker-log-filename-pattern #"^worker.log(.*)")
-
-(defn event-logs-filename
-  [storm-id port]
-  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "events.log"))
-
-(defn clojure-from-yaml-file [yamlFile]
-  (try
-    (with-open [reader (java.io.FileReader. yamlFile)]
-      (clojurify-structure (.load (Yaml. (SafeConstructor.)) reader)))
-    (catch Exception ex
-      (log-error ex))))
-
 (defn hashmap-to-persistent [^HashMap m]
   (zipmap (.keySet m) (.values m)))
 
-(defn retry-on-exception
-  "Retries specific function on exception based on retries count"
-  [retries task-description f & args]
-  (let [res (try {:value (apply f args)}
-              (catch Exception e
-                (if (<= 0 retries)
-                  (throw e)
-                  {:exception e})))]
-    (if (:exception res)
-      (do 
-        (log-error (:exception res) (str "Failed to " task-description ". Will make [" retries "] more attempts."))
-        (recur (dec retries) task-description f args))
-      (do 
-        (log-debug (str "Successful " task-description "."))
-        (:value res)))))
-
-(defn setup-default-uncaught-exception-handler
-  "Set a default uncaught exception handler to handle exceptions not caught in other threads."
-  []
-  (Thread/setDefaultUncaughtExceptionHandler
-    (proxy [Thread$UncaughtExceptionHandler] []
-      (uncaughtException [thread thrown]
-        (try
-          (Utils/handleUncaughtException thrown)
-          (catch Error err
-            (do
-              (log-error err "Received error in main thread.. terminating server...")
-              (.exit (Runtime/getRuntime) -2))))))))
-
-(defn redact-value
-  "Hides value for k in coll for printing coll safely"
-  [coll k]
-  (if (contains? coll k)
-    (assoc coll k (apply str (repeat (count (coll k)) "#")))
-    coll))
-
-(defn log-thrift-access
-  [request-id remoteAddress principal operation]
-  (doto
-    (ThriftAccessLogger.)
-    (.log (str "Request ID: " request-id " access from: " remoteAddress " principal: " principal " operation: " operation))))
-
-(def DISALLOWED-KEY-NAME-STRS #{"/" "." ":" "\\"})
-
-(defn validate-key-name!
-  [name]
-  (if (some #(.contains name %) DISALLOWED-KEY-NAME-STRS)
-    (throw (RuntimeException.
-             (str "Key name cannot contain any of the following: " (pr-str DISALLOWED-KEY-NAME-STRS))))
-    (if (clojure.string/blank? name)
-      (throw (RuntimeException.
-               ("Key name cannot be blank"))))))
