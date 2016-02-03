@@ -663,7 +663,7 @@
   (let [java-home (.get (System/getenv) "JAVA_HOME")]
     (if (nil? java-home)
       cmd
-      (str java-home Utils/filePathSeparator "bin" Utils/filePathSeparator cmd))))
+      (str java-home Utils/FILE_PATH_SEPARATOR "bin" Utils/FILE_PATH_SEPARATOR cmd))))
 
 (defn java-cmd []
   (jvm-cmd "java"))
@@ -940,7 +940,7 @@
   :distributed [conf storm-id master-code-dir localizer]
   ;; Downloading to permanent location is atomic
 
-  (let [tmproot (str (ConfigUtils/supervisorTmpDir conf) Utils/filePathSeparator (Utils/uuid))
+  (let [tmproot (str (ConfigUtils/supervisorTmpDir conf) Utils/FILE_PATH_SEPARATOR (Utils/uuid))
         stormroot (ConfigUtils/supervisorStormDistRoot conf storm-id)
         blobstore (Utils/getClientBlobStoreForSupervisor conf)]
     (FileUtils/forceMkdir (File. tmproot))
@@ -1063,8 +1063,8 @@
           storm-log4j2-conf-dir (if storm-log-conf-dir
                                   (if (.isAbsolute (File. storm-log-conf-dir)) ;(is-absolute-path? storm-log-conf-dir)
                                     storm-log-conf-dir
-                                    (str storm-home Utils/filePathSeparator storm-log-conf-dir))
-                                  (str storm-home Utils/filePathSeparator "log4j2"))
+                                    (str storm-home Utils/FILE_PATH_SEPARATOR storm-log-conf-dir))
+                                  (str storm-home Utils/FILE_PATH_SEPARATOR "log4j2"))
           stormroot (ConfigUtils/supervisorStormDistRoot conf storm-id)
           jlp (jlp stormroot conf)
           stormjar (ConfigUtils/supervisorStormJarPath stormroot)
@@ -1101,7 +1101,7 @@
                                             storm-log4j2-conf-dir
                                             (str "file:///" storm-log4j2-conf-dir))
                                           storm-log4j2-conf-dir)
-                                     Utils/filePathSeparator "worker.xml")
+                                     Utils/FILE_PATH_SEPARATOR "worker.xml")
           command (concat
                     [(java-cmd) "-cp" classpath 
                      topo-worker-logwriter-childopts
@@ -1166,7 +1166,7 @@
 
 (defmethod download-storm-code
   :local [conf storm-id master-code-dir localizer]
-  (let [tmproot (str (ConfigUtils/supervisorTmpDir conf) Utils/filePathSeparator (Utils/uuid))
+  (let [tmproot (str (ConfigUtils/supervisorTmpDir conf) Utils/FILE_PATH_SEPARATOR (Utils/uuid))
         stormroot (ConfigUtils/supervisorStormDistRoot conf storm-id)
         blob-store (Utils/getNimbusBlobStore conf master-code-dir nil)]
     (try
@@ -1180,7 +1180,7 @@
     (let [classloader (.getContextClassLoader (Thread/currentThread))
           resources-jar (resources-jar)
           url (.getResource classloader ConfigUtils/RESOURCES_SUBDIR)
-          target-dir (str stormroot Utils/filePathSeparator ConfigUtils/RESOURCES_SUBDIR)]
+          target-dir (str stormroot Utils/FILE_PATH_SEPARATOR ConfigUtils/RESOURCES_SUBDIR)]
       (cond
         resources-jar
         (do

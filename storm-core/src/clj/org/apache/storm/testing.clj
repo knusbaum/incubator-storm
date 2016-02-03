@@ -23,7 +23,7 @@
              [executor :as executor]])
   (:require [org.apache.storm [process-simulator :as psim]])
   (:import [org.apache.commons.io FileUtils]
-           [org.apache.storm.utils IFn])
+           [org.apache.storm.utils])
   (:import [java.io File])
   (:import [java.util HashMap ArrayList])
   (:import [java.util.concurrent.atomic AtomicInteger])
