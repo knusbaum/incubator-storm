@@ -23,12 +23,13 @@
   (:import [org.apache.storm.scheduler ISupervisor])
   (:import [org.apache.storm.utils Utils$UptimeComputer ConfigUtils])
   (:import [org.apache.storm.generated RebalanceOptions])
-  (:import [org.apache.storm.testing.staticmocking MockedConfigUtils])
+  (:import [org.mockito Matchers Mockito])
   (:import [java.util UUID])
   (:import [java.io File])
   (:import [java.nio.file Files])
   (:import [org.apache.storm.utils Utils IPredicate]
-           [org.apache.storm.utils.staticmocking MockedUtils])
+           [org.apache.storm.utils.staticmocking ConfigUtilsInstaller
+                                                 UtilsInstaller])
   (:import [java.nio.file.attribute FileAttribute])
   (:use [org.apache.storm config testing util timer log])
   (:use [org.apache.storm.daemon common])
