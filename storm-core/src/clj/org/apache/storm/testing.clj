@@ -566,8 +566,6 @@
         state (:storm-cluster-state cluster-map)
         spouts (.get_spouts topology)
         replacements (map-val (fn [v]
-;        replacements (Utils/mapVal
-;                       (reify IFn (eval [this v]
                                 (FixedTupleSpout.
                                   (for [tup v]
                                     (if (map? tup)

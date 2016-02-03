@@ -844,7 +844,7 @@
         lists (map second pairs)
         elems (map first pairs)
         iters (map (fn [_] (gensym)) lists)
-        bindings (->> (map (fn [i l] [i `(if ~l (.iterator ~l))]) iters lists)
+        bindings (->> (map (fn [i l] (let [lg (gensym)] [lg l i `(if ~lg (.iterator ~lg))])) iters lists)
                       (apply concat))
         tests (map (fn [i] `(and ~i (.hasNext ^Iterator ~i))) iters)
         assignments (->> (map (fn [e i] [e `(.next ^Iterator ~i)]) elems iters)
