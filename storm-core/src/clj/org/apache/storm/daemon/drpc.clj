@@ -59,7 +59,7 @@
 (defn check-authorization
   ([aclHandler mapping operation context]
     (if (not-nil? context)
-      (log-thrift-access (.requestID context) (.remoteAddress context) (.principal context) operation))
+      (Utils/logThriftAccess (.requestID context) (.remoteAddress context) (.principal context) operation))
     (if aclHandler
       (let [context (or context (ReqContext/context))]
         (if-not (.permit aclHandler context operation mapping)
@@ -272,5 +272,5 @@
         (.serve handler-server)))))
 
 (defn -main []
-  (setup-default-uncaught-exception-handler)
+  (Utils/setupDefaultUncaughtExceptionHandler)
   (launch-server!))

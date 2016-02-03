@@ -29,8 +29,8 @@
             LogConfig LogLevel LogLevelAction])
   (:import [java.util HashMap])
   (:import [java.io File])
-  (:import [org.apache.storm.utils Time Utils ConfigUtils IPredicate]
-           [org.apache.storm.utils.staticmocking ConfigUtilsInstaller])
+  (:import [org.apache.storm.utils Time Utils Utils$UptimeComputer ConfigUtils IPredicate]
+           [org.apache.storm.utils.staticmocking ConfigUtilsInstaller UtilsInstaller])
   (:import [org.apache.commons.io FileUtils]
            [org.json.simple JSONValue])
   (:use [org.apache.storm testing MockAutoCred util config log timer zookeeper])
@@ -101,7 +101,8 @@
          set         
          )))
 
-;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
+;TODO: when translating this function, don't call map-val, but instead use an inline for loop.
+; map-val is a temporary kluge for clojure.
 (defn topology-node-distribution [state storm-name]
   (let [storm-id (get-storm-id state storm-name)
         assignment (.assignment-info state storm-id nil)]
@@ -1392,22 +1393,25 @@
           expected-acls nimbus/NIMBUS-ZK-ACLS
           fake-inimbus (reify INimbus (getForcedScheduler [this] nil))
           fake-cu (proxy [ConfigUtils] []
-                      (nimbusTopoHistoryStateImpl [conf] nil))]
-      (with-open [_ (ConfigUtilsInstaller. fake-cu)]
+                      (nimbusTopoHistoryStateImpl [conf] nil))
+          fake-utils (proxy [MockedUtils] []
+                       (newInstanceImpl [_])
+                       (makeUptimeComputer [] (proxy [Utils$UptimeComputer] []
+                                                (upTime [] 0))))]
+      (with-open [_ (ConfigUtilsInstaller. fake-cu)
+                  _ (UtilsInstaller. fake-utils)]
         (stubbing [mk-authorization-handler nil
-                 cluster/mk-storm-cluster-state nil
-                 nimbus/file-cache-map nil
-                 nimbus/mk-blob-cache-map nil
-                 nimbus/mk-bloblist-cache-map nil
-                 uptime-computer nil
-                 new-instance nil
-                 mk-timer nil
-                 zk-leader-elector nil
-                 nimbus/mk-scheduler nil]
-          (nimbus/nimbus-data auth-conf fake-inimbus)
-          (verify-call-times-for cluster/mk-storm-cluster-state 1)
-          (verify-first-call-args-for-indices cluster/mk-storm-cluster-state [2]
-                                              expected-acls))))))
+                   cluster/mk-storm-cluster-state nil
+                   nimbus/file-cache-map nil
+                   nimbus/mk-blob-cache-map nil
+                   nimbus/mk-bloblist-cache-map nil
+                   mk-timer nil
+                   zk-leader-elector nil
+                   nimbus/mk-scheduler nil]
+                  (nimbus/nimbus-data auth-conf fake-inimbus)
+                  (verify-call-times-for cluster/mk-storm-cluster-state 1)
+                  (verify-first-call-args-for-indices cluster/mk-storm-cluster-state [2]
+                                                      expected-acls))))))
 
 (deftest test-file-bogus-download
   (with-local-cluster [cluster :daemon-conf {SUPERVISOR-ENABLE false TOPOLOGY-ACKER-EXECUTORS 0 TOPOLOGY-EVENTLOGGER-EXECUTORS 0}]

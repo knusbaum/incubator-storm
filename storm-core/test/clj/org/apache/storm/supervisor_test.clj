@@ -21,10 +21,9 @@
   (:require [clojure [string :as string] [set :as set]])
   (:import [org.apache.storm.testing TestWordCounter TestWordSpout TestGlobalCount TestAggregatesCounter TestPlannerSpout])
   (:import [org.apache.storm.scheduler ISupervisor])
-  (:import [org.apache.storm.utils ConfigUtils])
+  (:import [org.apache.storm.utils Utils$UptimeComputer ConfigUtils])
   (:import [org.apache.storm.generated RebalanceOptions])
-  (:import [org.mockito ArgumentCaptor]
-           [org.mockito Matchers Mockito])
+  (:import [org.mockito Matchers Mockito])
   (:import [java.util UUID])
   (:import [java.io File])
   (:import [java.nio.file Files])
@@ -54,7 +53,7 @@
         pred (reify IPredicate (test [this x] (not-nil? x)))
         ret (Utils/findFirst pred slot-assigns)]
     (when-not ret
-      (throw-runtime "Could not find assignment for worker"))
+      (Utils/throwRuntime "Could not find assignment for worker"))
     ret
     ))
 
@@ -636,11 +635,13 @@
           fake-cu (proxy [ConfigUtils] []
                     (supervisorStateImpl [conf] nil)
                     (supervisorLocalDirImpl [conf] nil))
-          fake-utils (proxy [Utils] [] (localHostnameImpl [] nil))]
+          fake-utils (proxy [Utils] []
+                       (localHostnameImpl [] nil)
+                       (makeUptimeComputer [] (proxy [Utils$UptimeComputer] []
+                                                (upTime [] 0))))]
       (with-open [_ (ConfigUtilsInstaller. fake-cu)
                   _ (UtilsInstaller. fake-utils)]
-        (stubbing [uptime-computer nil
-                   cluster/mk-storm-cluster-state nil
+        (stubbing [cluster/mk-storm-cluster-state nil
                    mk-timer nil]
           (supervisor/supervisor-data auth-conf nil fake-isupervisor)
           (verify-call-times-for cluster/mk-storm-cluster-state 1)

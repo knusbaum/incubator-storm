@@ -23,7 +23,8 @@
   (:require [clojure.set :as set])
   (:require [org.apache.storm.messaging.loader :as msg-loader])
   (:import [java.util.concurrent Executors]
-           [org.apache.storm.hooks IWorkerHook BaseWorkerHook])
+           [org.apache.storm.hooks IWorkerHook BaseWorkerHook]
+           [uk.org.lidalia.sysoutslf4j.context SysOutOverSLF4J])
   (:import [java.util ArrayList HashMap]
            [java.util.concurrent.locks ReentrantReadWriteLock])
   (:import [org.apache.commons.io FileUtils])
@@ -70,7 +71,7 @@
                     (apply merge)))
         zk-hb {:storm-id (:storm-id worker)
                :executor-stats stats
-               :uptime ((:uptime worker))
+               :uptime (. (:uptime worker) upTime)
                :time-secs (Utils/currentTimeSecs)
                }]
     ;; do the zookeeper heartbeat
@@ -261,7 +262,7 @@
         mq-context  (if mq-context
                       mq-context
                       (TransportFactory/makeContext storm-conf))]
-
+    
     (recursive-map
       :conf conf
       :mq-context mq-context
@@ -307,7 +308,7 @@
                                  (into {})
                                  (HashMap.))
       :suicide-fn (mk-suicide-fn conf)
-      :uptime (uptime-computer)
+      :uptime (Utils/makeUptimeComputer)
       :default-shared-resources (mk-default-resources <>)
       :user-shared-resources (mk-user-resources <>)
       :transfer-local-fn (mk-transfer-local-fn <>)
@@ -603,7 +604,7 @@
   (log-message "Launching worker for " storm-id " on " assignment-id ":" port " with id " worker-id
                " and conf " conf)
   (if-not (ConfigUtils/isLocalMode conf)
-    (redirect-stdio-to-slf4j!))
+    (SysOutOverSLF4J/sendSystemOutAndErrToSLF4J))
   ;; because in local mode, its not a separate
   ;; process. supervisor will register it in this case
   (when (= :distributed (ConfigUtils/clusterMode conf))
@@ -769,7 +770,7 @@
     (schedule-recurring (:reset-log-levels-timer worker) 0 (conf WORKER-LOG-LEVEL-RESET-POLL-SECS) (fn [] (reset-log-levels latest-log-config)))
     (schedule-recurring (:refresh-active-timer worker) 0 (conf TASK-REFRESH-POLL-SECS) (partial refresh-storm-active worker))
 
-    (log-message "Worker has topology config " (redact-value (:storm-conf worker) STORM-ZOOKEEPER-TOPOLOGY-AUTH-PAYLOAD))
+    (log-message "Worker has topology config " (Utils/redactValue (:storm-conf worker) STORM-ZOOKEEPER-TOPOLOGY-AUTH-PAYLOAD))
     (log-message "Worker " worker-id " for storm " storm-id " on " assignment-id ":" port " has finished loading")
     ret
     ))))))
@@ -784,7 +785,7 @@
 
 (defn -main [storm-id assignment-id port-str worker-id]
   (let [conf (clojurify-structure (ConfigUtils/readStormConfig))]
-    (setup-default-uncaught-exception-handler)
+    (Utils/setupDefaultUncaughtExceptionHandler)
     (validate-distributed-mode! conf)
     (let [worker (mk-worker conf nil storm-id assignment-id (Integer/parseInt port-str) worker-id)]
       (Utils/addShutdownHookWithForceKillIn1Sec #(.shutdown worker)))))

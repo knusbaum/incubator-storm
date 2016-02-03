@@ -20,11 +20,12 @@
          [string :only [blank? join]]
          [walk :only [keywordize-keys]]])
   (:use [org.apache.storm config log])
-  (:use [org.apache.storm.util :only [clojurify-structure defnk url-encode not-nil?]])
+  (:use [org.apache.storm.util :only [clojurify-structure defnk not-nil?]])
   (:use [clj-time coerce format])
   (:import [org.apache.storm.generated ExecutorInfo ExecutorSummary])
   (:import [org.apache.storm.logging.filters AccessLoggingFilter])
-  (:import [java.util EnumSet])
+  (:import [java.util EnumSet]
+           [java.net URLEncoder])
   (:import [org.eclipse.jetty.server Server]
            [org.eclipse.jetty.server.nio SelectChannelConnector]
            [org.eclipse.jetty.server.ssl SslSocketConnector]
@@ -109,7 +110,7 @@
 
 (defn url-format [fmt & args]
   (String/format fmt
-    (to-array (map #(url-encode (str %)) args))))
+    (to-array (map #(URLEncoder/encode (str %)) args))))
 
 (defn pretty-executor-info [^ExecutorInfo e]
   (str "[" (.get_task_start e) "-" (.get_task_end e) "]"))

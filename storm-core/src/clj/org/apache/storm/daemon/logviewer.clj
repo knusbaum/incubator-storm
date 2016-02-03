@@ -28,7 +28,8 @@
   (:import [org.apache.logging.log4j.core Appender LoggerContext])
   (:import [org.apache.logging.log4j.core.appender RollingFileAppender])
   (:import [java.io BufferedInputStream File FileFilter FileInputStream
-            InputStream InputStreamReader])
+            InputStream InputStreamReader]
+           [java.net URLDecoder])
   (:import [java.nio.file Files Path Paths DirectoryStream])
   (:import [java.nio ByteBuffer])
   (:import [org.apache.storm.utils Utils])
@@ -141,10 +142,10 @@
         nil))))
 
 (defn get-worker-id-from-metadata-file [metaFile]
-  (get (clojure-from-yaml-file metaFile) "worker-id"))
+  (get (clojurify-structure (Utils/readYamlFile metaFile)) "worker-id"))
 
 (defn get-topo-owner-from-metadata-file [metaFile]
-  (get (clojure-from-yaml-file metaFile) TOPOLOGY-SUBMITTER-USER))
+  (get (clojurify-structure (Utils/readYamlFile  metaFile)) TOPOLOGY-SUBMITTER-USER))
 
 (defn identify-worker-log-dirs [log-dirs]
   "return the workerid to worker-log-dir map"
@@ -309,7 +310,7 @@
 
 (defn get-log-user-group-whitelist [fname]
   (let [wl-file (ConfigUtils/getLogMetaDataFile fname)
-        m (clojure-from-yaml-file wl-file)]
+        m (clojurify-structure (Utils/readYamlFile wl-file))]
     (if (not-nil? m)
       (do
         (let [user-wl (.get m LOGS-USERS)
@@ -869,7 +870,7 @@
     (sort #(compare (.lastModified %2) (.lastModified %1))
       (filter-authorized-fn
         user
-        (filter #(re-find worker-log-filename-pattern (.getName %)) (DirectoryCleaner/getFilesForDir port-dir))))))
+        (filter #(re-find Utils/workerLogFilenamePattern (.getName %)) (DirectoryCleaner/getFilesForDir port-dir))))))
 
 (defn deep-search-logs-for-topology
   [topology-id user ^String root-dir search num-matches port file-offset offset search-archived? callback origin]
@@ -982,7 +983,7 @@
             user (.getUserName http-creds-handler servlet-request)
             start (if (:start m) (parse-long-from-map m :start))
             length (if (:length m) (parse-long-from-map m :length))
-            file (url-decode (:file m))]
+            file (URLDecoder/decode (:file m))]
         (log-template (log-page file start length (:grep m) user log-root)
           file user))
       (catch InvalidRequestException ex
@@ -1050,7 +1051,7 @@
             user (.getUserName http-creds-handler servlet-request)
             start (if (:start m) (parse-long-from-map m :start))
             length (if (:length m) (parse-long-from-map m :length))
-            file (url-decode (:file m))]
+            file (URLDecoder/decode (:file m))]
         (log-template (daemonlog-page file start length (:grep m) user daemonlog-root)
           file user))
       (catch InvalidRequestException ex
@@ -1078,7 +1079,7 @@
     ;; filter is configured.
     (try
       (let [user (.getUserName http-creds-handler servlet-request)]
-        (search-log-file (url-decode file)
+        (search-log-file (URLDecoder/decode file)
           user
           (if (= (:is-daemon m) "yes") daemonlog-root log-root)
           (:search-string m)
@@ -1192,7 +1193,7 @@
   (let [conf (clojurify-structure (ConfigUtils/readStormConfig))
         log-root (ConfigUtils/workerArtifactsRoot conf)
         daemonlog-root (log-root-dir (conf LOGVIEWER-APPENDER-NAME))]
-    (setup-default-uncaught-exception-handler)
+    (Utils/setupDefaultUncaughtExceptionHandler)
     (start-log-cleaner! conf log-root)
     (log-message "Starting logviewer server for storm version '"
                  STORM-VERSION

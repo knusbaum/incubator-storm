@@ -154,7 +154,7 @@
         bolts (.get_bolts topology)]
     (cond (contains? spouts component-id) :spout
           (contains? bolts component-id) :bolt
-          :else (throw-runtime "Could not find " component-id " in topology " topology))))
+          :else (Utils/throwRuntime ["Could not find " component-id " in topology " topology]))))
 
 (defn executor-selector [executor-data & _] (:type executor-data))
 
@@ -479,7 +479,7 @@
     (if p (* p num-tasks))))
 
 (defn init-spout-wait-strategy [storm-conf]
-  (let [ret (-> storm-conf (get TOPOLOGY-SPOUT-WAIT-STRATEGY) new-instance)]
+  (let [ret (-> storm-conf (get TOPOLOGY-SPOUT-WAIT-STRATEGY) (#(Utils/newInstance %)))]
     (.prepare ret storm-conf)
     ret
     ))
@@ -497,6 +497,10 @@
           task-data
           EVENTLOGGER-STREAM-ID
           [component-id message-id (System/currentTimeMillis) values]))))
+
+(defn- bit-xor-vals
+  [vals]
+  (reduce bit-xor 0 vals))
 
 (defmethod mk-threads :spout [executor-data task-datas initial-credentials]
   (let [{:keys [storm-conf component-id worker-context transfer-fn report-error sampler open-or-prepare-was-called?]} executor-data
@@ -530,7 +534,7 @@
                                     [stored-task-id spout-id tuple-finished-info start-time-ms] (.remove pending id)]
                                 (when spout-id
                                   (when-not (= stored-task-id task-id)
-                                    (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
+                                    (Utils/throwRuntime ["Fatal error, mismatched task ids: " task-id " " stored-task-id]))
                                   (let [time-delta (if start-time-ms (Time/deltaMs start-time-ms))]
                                     (condp = stream-id
                                       ACKER-ACK-STREAM-ID (ack-spout-msg executor-data (get task-datas task-id)

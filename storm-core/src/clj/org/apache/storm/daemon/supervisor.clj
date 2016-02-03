@@ -22,7 +22,7 @@
            [org.apache.storm Constants]
            [org.apache.storm.cluster ClusterStateContext DaemonType]
            [java.net JarURLConnection]
-           [java.net URI]
+           [java.net URI URLDecoder]
            [org.apache.commons.io FileUtils])
   (:use [org.apache.storm config util log timer local-state])
   (:import [org.apache.storm.generated AuthorizationException KeyNotFoundException WorkerResources])
@@ -105,7 +105,7 @@
   "Returns map from port to struct containing :storm-id, :executors and :resources"
   ([assignments-snapshot assignment-id]
      (->> (dofor [sid (keys assignments-snapshot)] (read-my-executors assignments-snapshot sid assignment-id))
-          (apply merge-with (fn [& ignored] (throw-runtime "Should not have multiple topologies assigned to one port")))))
+          (apply merge-with (fn [& ignored] (Utils/throwRuntime ["Should not have multiple topologies assigned to one port"])))))
   ([assignments-snapshot assignment-id existing-assignment retries]
      (try (let [assignments (read-assignments assignments-snapshot assignment-id)]
             (reset! retries 0)
@@ -121,8 +121,7 @@
   (map-val :master-code-dir assignments-snapshot))
 
 (defn- read-downloaded-storm-ids [conf]
-  (map #(url-decode %) (Utils/readDirContents (ConfigUtils/supervisorStormDistRoot conf)))
-  )
+  (map #(URLDecoder/decode %) (Utils/readDirContents (ConfigUtils/supervisorStormDistRoot conf))))
 
 (defn read-worker-heartbeat [conf id]
   (let [local-state (ConfigUtils/workerState conf id)]
@@ -320,7 +319,7 @@
    :shared-context shared-context
    :isupervisor isupervisor
    :active (atom true)
-   :uptime (uptime-computer)
+   :uptime (Utils/makeUptimeComputer)
    :version STORM-VERSION
    :worker-thread-pids-atom (atom {})
    :storm-cluster-state (cluster/mk-storm-cluster-state conf :acls (when
@@ -397,6 +396,11 @@
               (log-message "Missing topology storm code, so can't launch worker with assignment "
                 (get-worker-assignment-helper-msg assignment supervisor port id))
               nil)))))))
+
+
+(defn- select-keys-pred
+  [pred amap]
+  (into {} (filter (fn [[k v]] (pred k)) amap)))
 
 ;TODO: when translating this function, you should replace the filter-val with a proper for loop + if condition HERE
 (defn sync-processes [supervisor]
@@ -799,7 +803,7 @@
                                                   ;; used ports
                                                  (.getMetadata isupervisor)
                                                  (conf SUPERVISOR-SCHEDULER-META)
-                                                 ((:uptime supervisor))
+                                                 (. (:uptime supervisor) upTime)
                                                  (:version supervisor)
                                                  (mk-supervisor-capacities conf))))]
     (heartbeat-fn)
@@ -947,7 +951,7 @@
     (if-not on-windows?
       (Utils/restrictPermissions tmproot)
       (if (conf SUPERVISOR-RUN-WORKER-AS-USER)
-        (throw-runtime (str "ERROR: Windows doesn't implement setting the correct permissions"))))
+        (Utils/throwRuntime (str "ERROR: Windows doesn't implement setting the correct permissions"))))
     (Utils/downloadResourcesAsSupervisor (ConfigUtils/masterStormJarKey storm-id)
       (ConfigUtils/supervisorStormJarPath tmproot) blobstore)
     (Utils/downloadResourcesAsSupervisor (ConfigUtils/masterStormCodeKey storm-id)
@@ -1167,7 +1171,7 @@
 (defn resources-jar []
   (->> (.split (Utils/currentClasspath) File/pathSeparator)
        (filter #(.endsWith  % ".jar"))
-       (filter #(zip-contains-dir? % ConfigUtils/RESOURCES_SUBDIR))
+       (filter #(Utils/zipDoesContainDir % ConfigUtils/RESOURCES_SUBDIR))
        first ))
 
 (defmethod download-storm-code
@@ -1249,5 +1253,5 @@
         ))))
 
 (defn -main []
-  (setup-default-uncaught-exception-handler)
+  (Utils/setupDefaultUncaughtExceptionHandler)
   (-launch (standalone-supervisor)))

@@ -21,7 +21,7 @@
   (:import [java.nio.file Paths])
   (:import [org.apache.storm Config])
   (:import [org.apache.storm.utils Time Container ClojureTimerTask Utils
-            MutableObject MutableInt])
+            MutableObject])
   (:import [org.apache.storm.security.auth NimbusPrincipal])
   (:import [javax.security.auth Subject])
   (:import [java.util UUID Random ArrayList List Collections])
@@ -35,7 +35,6 @@
   (:import [java.lang.management ManagementFactory])
   (:import [org.apache.commons.exec DefaultExecutor CommandLine])
   (:import [org.apache.commons.io FileUtils])
-  (:import [org.apache.storm.logging ThriftAccessLogger])
   (:import [org.apache.commons.exec ExecuteException])
   (:import [org.json.simple JSONValue])
   (:import [org.yaml.snakeyaml Yaml]
@@ -750,183 +749,180 @@
 ;;          (finally
 ;;            ~@restorers)))))
 
-(defn map-diff
-  "Returns mappings in m2 that aren't in m1"
-  [m1 m2]
-  (into {} (filter (fn [[k v]] (not= v (m1 k))) m2)))
+;;(defn map-diff
+;;  "Returns mappings in m2 that aren't in m1"
+;;  [m1 m2]
+;;  (into {} (filter (fn [[k v]] (not= v (m1 k))) m2)))
 
-(defn select-keys-pred
-  [pred amap]
-  (into {} (filter (fn [[k v]] (pred k)) amap)))
+;(defn select-keys-pred
+;  [pred amap]
+;  (into {} (filter (fn [[k v]] (pred k)) amap)))
 
-(defn rotating-random-range
-  [choices]
-  (let [rand (Random.)
-        choices (ArrayList. choices)]
-    (Collections/shuffle choices rand)
-    [(MutableInt. -1) choices rand]))
+;(defn rotating-random-range
+;  [choices]
+;  (let [rand (Random.)
+;        choices (ArrayList. choices)]
+;    (Collections/shuffle choices rand)
+;    [(MutableInt. -1) choices rand]))
 
-(defn acquire-random-range-id
-  [[^MutableInt curr ^List state ^Random rand]]
-  (when (>= (.increment curr) (.size state))
-    (.set curr 0)
-    (Collections/shuffle state rand))
-  (.get state (.get curr)))
+;(defn acquire-random-range-id
+;  [[^MutableInt curr ^List state ^Random rand]]
+;  (when (>= (.increment curr) (.size state))
+;    (.set curr 0)
+;    (Collections/shuffle state rand))
+;  (.get state (.get curr)))
 
-; this can be rewritten to be tail recursive
-(defn interleave-all
-  [& colls]
-  (if (empty? colls)
-    []
-    (let [colls (filter (complement empty?) colls)
-          my-elems (map first colls)
-          rest-elems (apply interleave-all (map rest colls))]
-      (concat my-elems rest-elems))))
+;; this can be rewritten to be tail recursive
+;(defn interleave-all
+;  [& colls]
+;  (if (empty? colls)
+;    []
+;    (let [colls (filter (complement empty?) colls)
+;          my-elems (map first colls)
+;          rest-elems (apply interleave-all (map rest colls))]
+;      (concat my-elems rest-elems))))
 
-(defn between?
-  "val >= lower and val <= upper"
-  [val lower upper]
-  (and (>= val lower)
-       (<= val upper)))
+;(defn between?
+;  "val >= lower and val <= upper"
+;  [val lower upper]
+;  (and (>= val lower)
+;       (<= val upper)))
 
-(defmacro benchmark
-  [& body]
-  `(let [l# (doall (range 1000000))]
-     (time
-       (doseq [i# l#]
-         ~@body))))
+;(defmacro benchmark
+;  [& body]
+;  `(let [l# (doall (range 1000000))]
+;     (time
+;       (doseq [i# l#]
+;         ~@body))))
 
-(defn rand-sampler
-  [freq]
-  (let [r (java.util.Random.)]
-    (fn [] (= 0 (.nextInt r freq)))))
+;(defn rand-sampler
+;  [freq]
+;  (let [r (java.util.Random.)]
+;    (fn [] (= 0 (.nextInt r freq)))))
 
-(defn even-sampler
-  [freq]
-  (let [freq (int freq)
-        start (int 0)
-        r (java.util.Random.)
-        curr (MutableInt. -1)
-        target (MutableInt. (.nextInt r freq))]
-    (with-meta
-      (fn []
-        (let [i (.increment curr)]
-          (when (>= i freq)
-            (.set curr start)
-            (.set target (.nextInt r freq))))
-        (= (.get curr) (.get target)))
-      {:rate freq})))
+;(defn even-sampler
+;  [freq]
+;  (let [freq (int freq)
+;        start (int 0)
+;        r (java.util.Random.)
+;        curr (MutableInt. -1)
+;        target (MutableInt. (.nextInt r freq))]
+;    (with-meta
+;      (fn []
+;        (let [i (.increment curr)]
+;          (when (>= i freq)
+;            (.set curr start)
+;            (.set target (.nextInt r freq))))
+;        (= (.get curr) (.get target)))
+;      {:rate freq})))
 
-(defn sampler-rate
-  [sampler]
-  (:rate (meta sampler)))
+;(defn sampler-rate
+;  [sampler]
+;  (:rate (meta sampler)))
 
-(defn class-selector
-  [obj & args]
-  (class obj))
+;(defn class-selector
+;  [obj & args]
+;  (class obj))
 
-(defn uptime-computer []
-  (let [start-time (Utils/currentTimeSecs)]
-    (fn [] (Time/delta start-time))))
+;(defn uptime-computer []
+;  (let [start-time (Utils/currentTimeSecs)]
+;    (fn [] (Time/delta start-time))))
 
-(defn stringify-error [error]
-  (let [result (StringWriter.)
-        printer (PrintWriter. result)]
-    (.printStackTrace error printer)
-    (.toString result)))
+;(defn stringify-error [error]
+;  (let [result (StringWriter.)
+;        printer (PrintWriter. result)]
+;    (.printStackTrace error printer)
+;    (.toString result)))
 
-(defn nil-to-zero
-  [v]
-  (or v 0))
+;(defn nil-to-zero
+;  [v]
+;  (or v 0))
 
-(defn bit-xor-vals
-  [vals]
-  (reduce bit-xor 0 vals))
+;(defn bit-xor-vals
+;  [vals]
+;  (reduce bit-xor 0 vals))
 
 (defmacro with-error-reaction
   [afn & body]
   `(try ~@body
      (catch Throwable t# (~afn t#))))
 
-(defn container
-  []
-  (Container.))
+;(defn container
+;  []
+;  (Container.))
 
-(defn container-set! [^Container container obj]
-  (set! (. container object) obj)
-  container)
+;(defn container-set! [^Container container obj]
+;  (set! (. container object) obj)
+;  container)
 
-(defn container-get [^Container container]
-  (. container object))
+;(defn container-get [^Container container]
+;  (. container object))
 
-(defn to-millis [secs]
-  (* 1000 (long secs)))
+;(defn to-millis [secs]
+;  (* 1000 (long secs)))
 
-(defn throw-runtime [& strs]
-  (throw (RuntimeException. (apply str strs))))
+;(defn throw-runtime [& strs]
+;  (throw (RuntimeException. (apply str strs))))
 
-(defn redirect-stdio-to-slf4j!
-  []
-  ;; set-var-root doesn't work with *out* and *err*, so digging much deeper here
-  ;; Unfortunately, this code seems to work at the REPL but not when spawned as worker processes
-  ;; it might have something to do with being a child process
-  ;; (set! (. (.getThreadBinding RT/OUT) val)
-  ;;       (java.io.OutputStreamWriter.
-  ;;         (log-stream :info "STDIO")))
-  ;; (set! (. (.getThreadBinding RT/ERR) val)
-  ;;       (PrintWriter.
-  ;;         (java.io.OutputStreamWriter.
-  ;;           (log-stream :error "STDIO"))
-  ;;         true))
-  (log-capture! "STDIO"))
+;(defn redirect-stdio-to-slf4j!
+;  []
+;  ;; set-var-root doesn't work with *out* and *err*, so digging much deeper here
+;  ;; Unfortunately, this code seems to work at the REPL but not when spawned as worker processes
+;  ;; it might have something to do with being a child process
+;  ;; (set! (. (.getThreadBinding RT/OUT) val)
+;  ;;       (java.io.OutputStreamWriter.
+;  ;;         (log-stream :info "STDIO")))
+;  ;; (set! (. (.getThreadBinding RT/ERR) val)
+;  ;;       (PrintWriter.
+;  ;;         (java.io.OutputStreamWriter.
+;  ;;           (log-stream :error "STDIO"))
+;  ;;         true))
+;  (log-capture! "STDIO"))
 
-(defn spy
-  [prefix val]
-  (log-message prefix ": " val)
-  val)
+;(defn spy
+;  [prefix val]
+;  (log-message prefix ": " val)
+;  val)
 
-(defn zip-contains-dir?
-  [zipfile target]
-  (let [entries (->> zipfile (ZipFile.) .entries enumeration-seq (map (memfn getName)))]
-    (boolean (some #(.startsWith % (str target "/")) entries))))
+;; end of batch 4
 
-(defn url-encode
-  [s]
-  (codec/url-encode s))
+;(defn url-encode
+;  [s]
+;  (codec/url-encode s))
 
-(defn url-decode
-  [s]
-  (codec/url-decode s))
+;(defn url-decode
+;  [s]
+;  (codec/url-decode s))
 
-(defn join-maps
-  [& maps]
-  (let [all-keys (apply set/union (for [m maps] (-> m keys set)))]
-    (into {} (for [k all-keys]
-               [k (for [m maps] (m k))]))))
+;(defn join-maps
+;  [& maps]
+;  (let [all-keys (apply set/union (for [m maps] (-> m keys set)))]
+;    (into {} (for [k all-keys]
+;               [k (for [m maps] (m k))]))))
 
-(defn partition-fixed
-  [max-num-chunks aseq]
-  (if (zero? max-num-chunks)
-    []
-    (let [chunks (->> (Utils/integerDivided (count aseq) max-num-chunks)
-                      clojurify-structure
-                      (#(dissoc % 0))
-                      (sort-by (comp - first))
-                      (mapcat (fn [[size amt]] (repeat amt size)))
-                      )]
-      (loop [result []
-             [chunk & rest-chunks] chunks
-             data aseq]
-        (if (nil? chunk)
-          result
-          (let [[c rest-data] (split-at chunk data)]
-            (recur (conj result c)
-                   rest-chunks
-                   rest-data)))))))
+;(defn partition-fixed
+;  [max-num-chunks aseq]
+;  (if (zero? max-num-chunks)
+;    []
+;    (let [chunks (->> (Utils/integerDivided (count aseq) max-num-chunks)
+;                      clojurify-structure
+;                      (#(dissoc % 0))
+;                      (sort-by (comp - first))
+;                      (mapcat (fn [[size amt]] (repeat amt size)))
+;                      )]
+;      (loop [result []
+;             [chunk & rest-chunks] chunks
+;             data aseq]
+;        (if (nil? chunk)
+;          result
+;          (let [[c rest-data] (split-at chunk data)]
+;            (recur (conj result c)
+;                   rest-chunks
+;                   rest-data)))))))
 
 
-(defn assoc-apply-self
-  [curr key afn]
+;; The following two will go away when worker, task, executor go away.
+(defn assoc-apply-self [curr key afn]
   (assoc curr key (afn curr)))
 
 (defmacro recursive-map
@@ -935,81 +931,85 @@
        (map (fn [[key form]] `(assoc-apply-self ~key (fn [~'<>] ~form))))
        (concat `(-> {}))))
 
-(defn current-stack-trace
-  []
-  (->> (Thread/currentThread)
-       .getStackTrace
-       (map str)
-       (str/join "\n")))
+;(defn current-stack-trace
+;  []
+;  (->> (Thread/currentThread)
+;       .getStackTrace
+;       (map str)
+;       (str/join "\n")))
 
-(defn get-iterator
-  [^Iterable alist]
-  (if alist (.iterator alist)))
+;(defn get-iterator
+;  [^Iterable alist]
+;  (if alist (.iterator alist)))
 
-(defn iter-has-next?
-  [^Iterator iter]
-  (if iter (.hasNext iter) false))
+;(defn iter-has-next?
+;  [^Iterator iter]
+;  (if iter (.hasNext iter) false))
 
-(defn iter-next
-  [^Iterator iter]
-  (.next iter))
+;(defn iter-next
+;  [^Iterator iter]
+;  (.next iter))
 
+; These six following will go away later. To be replaced by native java loops.
 (defmacro fast-list-iter
   [pairs & body]
   (let [pairs (partition 2 pairs)
         lists (map second pairs)
         elems (map first pairs)
         iters (map (fn [_] (gensym)) lists)
-        bindings (->> (map (fn [i l] [i `(get-iterator ~l)]) iters lists)
+        bindings (->> (map (fn [i l] [i `(if ~l (.iterator ~l))]) iters lists)
                       (apply concat))
-        tests (map (fn [i] `(iter-has-next? ~i)) iters)
-        assignments (->> (map (fn [e i] [e `(iter-next ~i)]) elems iters)
+        tests (map (fn [i] `(and ~i (.hasNext ^Iterator ~i))) iters)
+        assignments (->> (map (fn [e i] [e `(.next ^Iterator ~i)]) elems iters)
                          (apply concat))]
     `(let [~@bindings]
        (while (and ~@tests)
          (let [~@assignments]
            ~@body)))))
 
-(defn fast-list-map
-  [afn alist]
-  (let [ret (ArrayList.)]
-    (fast-list-iter [e alist]
-                    (.add ret (afn e)))
-    ret))
+;(defn fast-list-map
+;  [afn alist]
+;  (let [ret (ArrayList.)]
+;    (fast-list-iter [e alist]
+;                    (.add ret (afn e)))
+;    ret))
 
 (defmacro fast-list-for
   [[e alist] & body]
-  `(fast-list-map (fn [~e] ~@body) ~alist))
+  `(let [ret# (ArrayList.)]
+     (fast-list-iter [~e ~alist]
+                     (.add ret# (do ~@body)))
+     ret#))
 
-(defn map-iter
-  [^Map amap]
-  (if amap (-> amap .entrySet .iterator)))
+;(defn map-iter
+;  [^Map amap]
+;  (if amap (-> amap .entrySet .iterator)))
 
-(defn convert-entry
-  [^Map$Entry entry]
-  [(.getKey entry) (.getValue entry)])
+;(defn convert-entry
+;  [^Map$Entry entry]
+;  [(.getKey entry) (.getValue entry)])
 
 (defmacro fast-map-iter
   [[bind amap] & body]
-  `(let [iter# (map-iter ~amap)]
-     (while (iter-has-next? iter#)
-       (let [entry# (iter-next iter#)
-             ~bind (convert-entry entry#)]
+  `(let [iter# (if ~amap (.. ^Map ~amap entrySet iterator))]
+     (while (and iter# (.hasNext ^Iterator iter#))
+       (let [entry# (.next ^Iterator iter#)
+             ~bind [(.getKey ^Map$Entry entry#) (.getValue ^Map$Entry entry#)]]
          ~@body))))
 
-(defn fast-first
-  [^List alist]
-  (.get alist 0))
+;(defn fast-first
+;  [^List alist]
+;  (.get alist 0));
 
-(defmacro get-with-default
-  [amap key default-val]
-  `(let [curr# (.get ~amap ~key)]
-     (if curr#
-       curr#
-       (do
-         (let [new# ~default-val]
-           (.put ~amap ~key new#)
-           new#)))))
+;(defmacro get-with-default
+;  [amap key default-val]
+;  `(let [curr# (.get ~amap ~key)]
+;     (if curr#
+;       curr#
+;       (do
+;         (let [new# ~default-val]
+;           (.put ~amap ~key new#)
+;           new#)))))
 
 (defn fast-group-by
   [afn alist]
@@ -1017,18 +1017,23 @@
     (fast-list-iter
       [e alist]
       (let [key (afn e)
-            ^List curr (get-with-default ret key (ArrayList.))]
+            ^List curr (let [curr (.get ret key)]
+                         (if curr
+                           curr
+                           (let [default (ArrayList.)]
+                             (.put ret key default)
+                             default)))]
         (.add curr e)))
     ret))
 
-(defn new-instance
-  [klass]
-  (let [klass (if (string? klass) (Class/forName klass) klass)]
-    (.newInstance klass)))
+;(defn new-instance
+;  [klass]
+;  (let [klass (if (string? klass) (Class/forName klass) klass)]
+;    (.newInstance klass)))
 
-(defn get-configured-class
-  [conf config-key]
-  (if (.get conf config-key) (new-instance (.get conf config-key)) nil))
+;(defn get-configured-class
+;  [conf config-key]
+;  (if (.get conf config-key) (new-instance (.get conf config-key)) nil))
 
 (defmacro -<>
   ([x] x)
@@ -1040,75 +1045,75 @@
               (list form x)))
   ([x form & more] `(-<> (-<> ~x ~form) ~@more)))
 
-(defn logs-filename
-  [storm-id port]
-  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "worker.log"))
+;(defn logs-filename
+;  [storm-id port]
+;  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "worker.log"))
 
-(def worker-log-filename-pattern #"^worker.log(.*)")
+;(def worker-log-filename-pattern #"^worker.log(.*)")
 
-(defn event-logs-filename
-  [storm-id port]
-  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "events.log"))
+;(defn event-logs-filename
+;  [storm-id port]
+;  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "events.log"))
 
-(defn clojure-from-yaml-file [yamlFile]
-  (try
-    (with-open [reader (java.io.FileReader. yamlFile)]
-      (clojurify-structure (.load (Yaml. (SafeConstructor.)) reader)))
-    (catch Exception ex
-      (log-error ex))))
+;(defn clojure-from-yaml-file [yamlFile]
+;  (try
+;    (with-open [reader (java.io.FileReader. yamlFile)]
+;      (clojurify-structure (.load (Yaml. (SafeConstructor.)) reader)))
+;    (catch Exception ex
+;      (log-error ex))));
 
 (defn hashmap-to-persistent [^HashMap m]
   (zipmap (.keySet m) (.values m)))
 
-(defn retry-on-exception
-  "Retries specific function on exception based on retries count"
-  [retries task-description f & args]
-  (let [res (try {:value (apply f args)}
-              (catch Exception e
-                (if (<= 0 retries)
-                  (throw e)
-                  {:exception e})))]
-    (if (:exception res)
-      (do 
-        (log-error (:exception res) (str "Failed to " task-description ". Will make [" retries "] more attempts."))
-        (recur (dec retries) task-description f args))
-      (do 
-        (log-debug (str "Successful " task-description "."))
-        (:value res)))))
-
-(defn setup-default-uncaught-exception-handler
-  "Set a default uncaught exception handler to handle exceptions not caught in other threads."
-  []
-  (Thread/setDefaultUncaughtExceptionHandler
-    (proxy [Thread$UncaughtExceptionHandler] []
-      (uncaughtException [thread thrown]
-        (try
-          (Utils/handleUncaughtException thrown)
-          (catch Error err
-            (do
-              (log-error err "Received error in main thread.. terminating server...")
-              (.exit (Runtime/getRuntime) -2))))))))
-
-(defn redact-value
-  "Hides value for k in coll for printing coll safely"
-  [coll k]
-  (if (contains? coll k)
-    (assoc coll k (apply str (repeat (count (coll k)) "#")))
-    coll))
-
-(defn log-thrift-access
-  [request-id remoteAddress principal operation]
-  (doto
-    (ThriftAccessLogger.)
-    (.log (str "Request ID: " request-id " access from: " remoteAddress " principal: " principal " operation: " operation))))
-
-(def DISALLOWED-KEY-NAME-STRS #{"/" "." ":" "\\"})
-
-(defn validate-key-name!
-  [name]
-  (if (some #(.contains name %) DISALLOWED-KEY-NAME-STRS)
-    (throw (RuntimeException.
-             (str "Key name cannot contain any of the following: " (pr-str DISALLOWED-KEY-NAME-STRS))))
-    (if (clojure.string/blank? name)
-      (throw (RuntimeException.
-               ("Key name cannot be blank"))))))
+;(defn retry-on-exception
+;  "Retries specific function on exception based on retries count"
+;  [retries task-description f & args]
+;  (let [res (try {:value (apply f args)}
+;              (catch Exception e
+;                (if (<= 0 retries)
+;                  (throw e)
+;                  {:exception e})))]
+;    (if (:exception res)
+;      (do 
+;        (log-error (:exception res) (str "Failed to " task-description ". Will make [" retries "] more attempts."))
+;        (recur (dec retries) task-description f args))
+;      (do 
+;        (log-debug (str "Successful " task-description "."))
+;        (:value res)))))
+;
+;(defn setup-default-uncaught-exception-handler
+;  "Set a default uncaught exception handler to handle exceptions not caught in other threads."
+;  []
+;  (Thread/setDefaultUncaughtExceptionHandler
+;    (proxy [Thread$UncaughtExceptionHandler] []
+;      (uncaughtException [thread thrown]
+;        (try
+;          (Utils/handleUncaughtException thrown)
+;          (catch Error err
+;            (do
+;              (log-error err "Received error in main thread.. terminating server...")
+;              (.exit (Runtime/getRuntime) -2))))))))
+;
+;(defn redact-value
+;  "Hides value for k in coll for printing coll safely"
+;  [coll k]
+;  (if (contains? coll k)
+;    (assoc coll k (apply str (repeat (count (coll k)) "#")))
+;    coll))
+;
+;(defn log-thrift-access
+;  [request-id remoteAddress principal operation]
+;  (doto
+;    (ThriftAccessLogger.)
+;    (.log (str "Request ID: " request-id " access from: " remoteAddress " principal: " principal " operation: " operation))))
+;
+;(def DISALLOWED-KEY-NAME-STRS #{"/" "." ":" "\\"})
+;
+;(defn validate-key-name!
+;  [name]
+;  (if (some #(.contains name %) DISALLOWED-KEY-NAME-STRS)
+;    (throw (RuntimeException.
+;             (str "Key name cannot contain any of the following: " (pr-str DISALLOWED-KEY-NAME-STRS))))
+;    (if (clojure.string/blank? name)
+;      (throw (RuntimeException.
+;               ("Key name cannot be blank"))))))

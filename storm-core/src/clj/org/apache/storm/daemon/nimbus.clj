@@ -116,7 +116,7 @@
 
                     (conf STORM-SCHEDULER)
                     (do (log-message "Using custom scheduler: " (conf STORM-SCHEDULER))
-                        (-> (conf STORM-SCHEDULER) new-instance))
+                        (-> (conf STORM-SCHEDULER) (#(Utils/newInstance %))))
 
                     :else
                     (do (log-message "Using default scheduler")
@@ -159,7 +159,7 @@
 
 (defn create-tology-action-notifier [conf]
   (when-not (clojure.string/blank? (conf NIMBUS-TOPOLOGY-ACTION-NOTIFIER-PLUGIN))
-    (let [instance (new-instance (conf NIMBUS-TOPOLOGY-ACTION-NOTIFIER-PLUGIN))]
+    (let [instance (Utils/newInstance (conf NIMBUS-TOPOLOGY-ACTION-NOTIFIER-PLUGIN))]
       (try
         (.prepare instance conf)
         instance
@@ -189,8 +189,8 @@
      :blob-downloaders (mk-blob-cache-map conf)
      :blob-uploaders (mk-blob-cache-map conf)
      :blob-listers (mk-bloblist-cache-map conf)
-     :uptime (uptime-computer)
-     :validator (new-instance (conf NIMBUS-TOPOLOGY-VALIDATOR))
+     :uptime (Utils/makeUptimeComputer)
+     :validator (Utils/newInstance (conf NIMBUS-TOPOLOGY-VALIDATOR))
      :timer (mk-timer :kill-fn (fn [t]
                                  (log-error t "Error when processing event")
                                  (Utils/exitProcess 20 "Error when processing an event")
@@ -348,7 +348,7 @@
                                               ", status: " status,
                                               " storm-id: " storm-id)]
                                  (if error-on-no-transition?
-                                   (throw-runtime msg)
+                                   (Utils/throwRuntime msg)
                                    (do (when-not (contains? system-events event)
                                          (log-message msg))
                                        nil))
@@ -652,8 +652,11 @@
          (Utils/reverseMap)
          clojurify-structure
          (map-val sort)
-         (join-maps component->executors)
-         (map-val (partial apply partition-fixed))
+         ((fn [ & maps ] (Utils/joinMaps (into-array (into [component->executors] maps)))))
+         (clojurify-structure)
+         (map-val (partial apply (fn part-fixed [a b] (Utils/partitionFixed a b))))
+;         (map-val (partial apply partition-fixed))
+         ((fn [whatever] (log-message (pr-str "after-partition-fixed: " whatever)) whatever))
          (mapcat second)
          (map to-executor-id)
          )))
@@ -662,6 +665,7 @@
   (let [conf (:conf nimbus)
         blob-store (:blob-store nimbus)
         executors (compute-executors nimbus storm-id)
+        _ (log-message "EXECUTORS: " (pr-str executors))
         topology (read-storm-topology-as-nimbus storm-id blob-store)
         storm-conf (read-storm-conf-as-nimbus storm-id blob-store)
         task->component (storm-task-info topology storm-conf)
@@ -866,6 +870,11 @@
         _ (reset! (:id->resources nimbus) (.getTopologyResourcesMap cluster))]
     (.getAssignments cluster)))
 
+(defn- map-diff
+  "Returns mappings in m2 that aren't in m1"
+  [m1 m2]
+  (into {} (filter (fn [[k v]] (not= v (m1 k))) m2)))
+
 (defn changed-executors [executor->node+port new-executor->node+port]
   (let [executor->node+port (if executor->node+port (sort executor->node+port) nil)
         new-executor->node+port (if new-executor->node+port (sort new-executor->node+port) nil)
@@ -1031,7 +1040,7 @@
            impersonation-authorizer (:impersonation-authorization-handler nimbus)
            ctx (or context (ReqContext/context))
            check-conf (if storm-conf storm-conf (if storm-name {TOPOLOGY-NAME storm-name}))]
-       (log-thrift-access (.requestID ctx) (.remoteAddress ctx) (.principal ctx) operation)
+       (Utils/logThriftAccess (.requestID ctx) (.remoteAddress ctx) (.principal ctx) operation)
        (if (.isImpersonating ctx)
          (do
           (log-warn "principal: " (.realPrincipal ctx) " is trying to impersonate principal: " (.principal ctx))
@@ -1152,7 +1161,7 @@
     (log-message "not a leader, skipping cleanup")))
 
 (defn- file-older-than? [now seconds file]
-  (<= (+ (.lastModified file) (to-millis seconds)) (to-millis now)))
+  (<= (+ (.lastModified file) (Time/toMillis seconds)) (Time/toMillis now)))
 
 (defn clean-inbox [dir-location seconds]
   "Deletes jar files in dir older than seconds."
@@ -1364,6 +1373,12 @@
 (defmethod blob-sync :local [conf nimbus]
   nil)
 
+(defn- between?
+  "val >= lower and val <= upper"
+  [val lower upper]
+  (and (>= val lower)
+    (<= val upper)))
+
 ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defserverfn service-handler [conf inimbus]
   (.prepare inimbus conf (ConfigUtils/masterInimbusDir conf))
@@ -1529,7 +1544,7 @@
             (log-message "Received topology submission for "
                          storm-name
                          " with conf "
-                         (redact-value storm-conf STORM-ZOOKEEPER-TOPOLOGY-AUTH-PAYLOAD))
+                         (Utils/redactValue storm-conf STORM-ZOOKEEPER-TOPOLOGY-AUTH-PAYLOAD))
             ;; lock protects against multiple topologies being submitted at once and
             ;; cleanup thread killing topology in b/w assignment and starting the topology
             (locking (:submit-lock nimbus)
@@ -1816,7 +1831,7 @@
                                          (.set_used_cpu sup-sum used-cpu))
                                        (when-let [version (:version info)] (.set_version sup-sum version))
                                        sup-sum))
-              nimbus-uptime ((:uptime nimbus))
+              nimbus-uptime (. (:uptime nimbus) upTime)
               bases (topology-bases storm-cluster-state)
               nimbuses (.nimbuses storm-cluster-state)
 
@@ -1900,7 +1915,7 @@
                                                                 (-> executor first task->component)
                                                                 host
                                                                 port
-                                                                (nil-to-zero (:uptime heartbeat)))
+                                                                (Utils/nullToZero (:uptime heartbeat)))
                                             (.set_stats stats))
                                           ))
               topo-info  (TopologyInfo. storm-id
@@ -1969,9 +1984,9 @@
                   position (.position blob-chunk)]
               (.write os chunk-array (+ array-offset position) remaining)
               (.put uploaders session os))
-            (throw-runtime "Blob for session "
+            (Utils/throwRuntime ["Blob for session "
               session
-              " does not exist (or timed out)"))))
+              " does not exist (or timed out)"]))))
 
       (^void finishBlobUpload [this ^String session]
         (if-let [^AtomicOutputStream os (.get (:blob-uploaders nimbus) session)]
@@ -1981,9 +1996,9 @@
               session
               ". Closing session.")
             (.remove (:blob-uploaders nimbus) session))
-          (throw-runtime "Blob for session "
+          (Utils/throwRuntime ["Blob for session "
             session
-            " does not exist (or timed out)")))
+            " does not exist (or timed out)"])))
 
       (^void cancelBlobUpload [this ^String session]
         (if-let [^AtomicOutputStream os (.get (:blob-uploaders nimbus) session)]
@@ -1993,9 +2008,9 @@
               session
               ". Closing session.")
             (.remove (:blob-uploaders nimbus) session))
-          (throw-runtime "Blob for session "
+          (Utils/throwRuntime ["Blob for session "
             session
-            " does not exist (or timed out)")))
+            " does not exist (or timed out)"])))
 
       (^ReadableBlobMeta getBlobMeta [this ^String blob-key]
         (let [^ReadableBlobMeta ret (.getBlobMeta (:blob-store nimbus)
@@ -2046,9 +2061,9 @@
               ^Iterator keys-it (if (clojure.string/blank? session)
                                   (.listKeys (:blob-store nimbus))
                                   (.get listers session))
-              _ (or keys-it (throw-runtime "Blob list for session "
+              _ (or keys-it (Utils/throwRuntime ["Blob list for session "
                               session
-                              " does not exist (or timed out)"))
+                              " does not exist (or timed out)"]))
 
               ;; Create a new session id if the user gave an empty session string.
               ;; This is the use case when the user wishes to list blobs
@@ -2273,5 +2288,5 @@
     ))
 
 (defn -main []
-  (setup-default-uncaught-exception-handler)
+  (Utils/setupDefaultUncaughtExceptionHandler)
   (-launch (standalone-nimbus)))

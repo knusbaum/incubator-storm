@@ -43,6 +43,8 @@
   (:import [org.apache.storm.security.auth AuthUtils])
   (:import [org.apache.storm.utils Utils VersionInfo ConfigUtils])
   (:import [org.apache.storm Config])
+  (:import [java.io File])
+  (:import [java.net URLEncoder URLDecoder])
   (:import [org.json.simple JSONValue])
   (:require [compojure.route :as route]
             [compojure.handler :as handler]
@@ -143,10 +145,10 @@
 
 (defn event-log-link
   [topology-id component-id host port secure?]
-  (logviewer-link host (event-logs-filename topology-id port) secure?))
+  (logviewer-link host (Utils/eventLogsFilename topology-id port) secure?))
 
 (defn worker-log-link [host port topology-id secure?]
-  (let [fname (logs-filename topology-id port)]
+  (let [fname (Utils/logsFilename topology-id port)]
     (logviewer-link host fname secure?)))
 
 (defn nimbus-log-link [host]
@@ -186,10 +188,10 @@
 
 (defn worker-dump-link [host port topology-id]
   (url-format "http://%s:%s/dumps/%s/%s"
-              (url-encode host)
+              (URLEncoder/encode host)
               (*STORM-CONF* LOGVIEWER-PORT)
-              (url-encode topology-id)
-              (str (url-encode host) ":" (url-encode port))))
+              (URLEncoder/encode topology-id)
+              (str (URLEncoder/encode host) ":" (URLEncoder/encode port))))
 
 (defn stats-times
   [stats-map]
@@ -457,7 +459,7 @@
     (for [^TopologySummary t summs]
       {
        "id" (.get_id t)
-       "encodedId" (url-encode (.get_id t))
+       "encodedId" (URLEncoder/encode (.get_id t))
        "owner" (.get_owner t)
        "name" (.get_name t)
        "status" (.get_status t)
@@ -550,7 +552,7 @@
       (common-agg-stats-json cs)
       (get-error-json topo-id (.get_last_error s) secure?)
       {"spoutId" id
-       "encodedSpoutId" (url-encode id)
+       "encodedSpoutId" (URLEncoder/encode id)
        "completeLatency" (float-str (.get_complete_latency_ms ss))})))
 
 (defmethod comp-agg-stats-json ComponentType/BOLT
@@ -561,7 +563,7 @@
       (common-agg-stats-json cs)
       (get-error-json topo-id (.get_last_error s) secure?)
       {"boltId" id
-       "encodedBoltId" (url-encode id)
+       "encodedBoltId" (URLEncoder/encode id)
        "capacity" (float-str (.get_capacity ss))
        "executeLatency" (float-str (.get_execute_latency_ms ss))
        "executed" (.get_executed ss)
@@ -585,7 +587,7 @@
                          (.get_samplingpct debug-opts)])
         uptime (.get_uptime_secs topo-info)]
     {"id" id
-     "encodedId" (url-encode id)
+     "encodedId" (URLEncoder/encode id)
      "owner" (.get_owner topo-info)
      "name" (.get_name topo-info)
      "status" (.get_status topo-info)
@@ -700,13 +702,13 @@
         ^CommonAggregateStats cas (.get_common_stats stats)
         comp-id (.get_componentId s)]
     {"component" comp-id
-     "encodedComponentId" (url-encode comp-id)
+     "encodedComponentId" (URLEncoder/encode comp-id)
      "stream" (.get_streamId s)
      "executeLatency" (float-str (.get_execute_latency_ms bas))
      "processLatency" (float-str (.get_process_latency_ms bas))
-     "executed" (nil-to-zero (.get_executed bas))
-     "acked" (nil-to-zero (.get_acked cas))
-     "failed" (nil-to-zero (.get_failed cas))}))
+     "executed" (Utils/nullToZero (.get_executed bas))
+     "acked" (Utils/nullToZero (.get_acked cas))
+     "failed" (Utils/nullToZero (.get_failed cas))}))
 
 (defmulti unpack-comp-output-stat
   (fn [[_ ^ComponentAggregateStats s]] (.get_type s)))
@@ -715,8 +717,8 @@
   [[stream-id ^ComponentAggregateStats stats]]
   (let [^CommonAggregateStats cas (.get_common_stats stats)]
     {"stream" stream-id
-     "emitted" (nil-to-zero (.get_emitted cas))
-     "transferred" (nil-to-zero (.get_transferred cas))}))
+     "emitted" (Utils/nullToZero (.get_emitted cas))
+     "transferred" (Utils/nullToZero (.get_transferred cas))}))
 
 (defmethod unpack-comp-output-stat ComponentType/SPOUT
   [[stream-id ^ComponentAggregateStats stats]]
@@ -724,11 +726,11 @@
         ^SpecificAggregateStats spec-s (.get_specific_stats stats)
         ^SpoutAggregateStats spout-s (.get_spout spec-s)]
     {"stream" stream-id
-     "emitted" (nil-to-zero (.get_emitted cas))
-     "transferred" (nil-to-zero (.get_transferred cas))
+     "emitted" (Utils/nullToZero (.get_emitted cas))
+     "transferred" (Utils/nullToZero (.get_transferred cas))
      "completeLatency" (float-str (.get_complete_latency_ms spout-s))
-     "acked" (nil-to-zero (.get_acked cas))
-     "failed" (nil-to-zero (.get_failed cas))}))
+     "acked" (Utils/nullToZero (.get_acked cas))
+     "failed" (Utils/nullToZero (.get_failed cas))}))
 
 (defmulti unpack-comp-exec-stat
   (fn [_ _ ^ComponentAggregateStats cas] (.get_type (.get_stats ^ExecutorAggregateStats cas))))
@@ -746,19 +748,19 @@
         exec-id (pretty-executor-info info)
         uptime (.get_uptime_secs summ)]
     {"id" exec-id
-     "encodedId" (url-encode exec-id)
+     "encodedId" (URLEncoder/encode exec-id)
      "uptime" (pretty-uptime-sec uptime)
      "uptimeSeconds" uptime
      "host" host
      "port" port
-     "emitted" (nil-to-zero (.get_emitted cas))
-     "transferred" (nil-to-zero (.get_transferred cas))
-     "capacity" (float-str (nil-to-zero (.get_capacity bas)))
+     "emitted" (Utils/nullToZero (.get_emitted cas))
+     "transferred" (Utils/nullToZero (.get_transferred cas))
+     "capacity" (float-str (Utils/nullToZero (.get_capacity bas)))
      "executeLatency" (float-str (.get_execute_latency_ms bas))
-     "executed" (nil-to-zero (.get_executed bas))
+     "executed" (Utils/nullToZero (.get_executed bas))
      "processLatency" (float-str (.get_process_latency_ms bas))
-     "acked" (nil-to-zero (.get_acked cas))
-     "failed" (nil-to-zero (.get_failed cas))
+     "acked" (Utils/nullToZero (.get_acked cas))
+     "failed" (Utils/nullToZero (.get_failed cas))
      "workerLogLink" (worker-log-link host port topology-id secure?)}))
 
 (defmethod unpack-comp-exec-stat ComponentType/SPOUT
@@ -774,16 +776,16 @@
         exec-id (pretty-executor-info info)
         uptime (.get_uptime_secs summ)]
     {"id" exec-id
-     "encodedId" (url-encode exec-id)
+     "encodedId" (URLEncoder/encode exec-id)
      "uptime" (pretty-uptime-sec uptime)
      "uptimeSeconds" uptime
      "host" host
      "port" port
-     "emitted" (nil-to-zero (.get_emitted cas))
-     "transferred" (nil-to-zero (.get_transferred cas))
+     "emitted" (Utils/nullToZero (.get_emitted cas))
+     "transferred" (Utils/nullToZero (.get_transferred cas))
      "completeLatency" (float-str (.get_complete_latency_ms sas))
-     "acked" (nil-to-zero (.get_acked cas))
-     "failed" (nil-to-zero (.get_failed cas))
+     "acked" (Utils/nullToZero (.get_acked cas))
+     "failed" (Utils/nullToZero (.get_failed cas))
      "workerLogLink" (worker-log-link host port topology-id secure?)}))
 
 (defmulti unpack-component-page-info
@@ -851,13 +853,13 @@
                                    secure?)
        "user" user
        "id" component
-       "encodedId" (url-encode component)
+       "encodedId" (URLEncoder/encode component)
        "name" (.get_topology_name comp-page-info)
        "executors" (.get_num_executors comp-page-info)
        "tasks" (.get_num_tasks comp-page-info)
        "topologyId" topology-id
        "topologyStatus" (.get_topology_status comp-page-info)
-       "encodedTopologyId" (url-encode topology-id)
+       "encodedTopologyId" (URLEncoder/encode topology-id)
        "window" window
        "componentType" (-> comp-page-info .get_component_type str lower-case)
        "windowHint" window-hint
@@ -969,7 +971,7 @@
     (assert-authorized-user "getClusterInfo")
     (json-response (all-topologies-summary) (:callback m)))
   (GET  "/api/v1/topology-workers/:id" [:as {:keys [cookies servlet-request]} id & m]
-    (let [id (url-decode id)]
+    (let [id (URLDecoder/decode id)]
       (json-response {"hostPortList" (worker-host-port id)
                       "logviewerPort" (*STORM-CONF* LOGVIEWER-PORT)} (:callback m))))
   (GET "/api/v1/topology/:id" [:as {:keys [cookies servlet-request scheme]} id & m]

@@ -17,7 +17,8 @@
   (:import [java.io InputStream OutputStream]
            [org.apache.storm.generated SettableBlobMeta AccessControl AuthorizationException
             KeyNotFoundException]
-           [org.apache.storm.blobstore BlobStoreAclHandler])
+           [org.apache.storm.blobstore BlobStoreAclHandler]
+           [org.apache.storm.utils Utils])
   (:use [org.apache.storm config]
         [clojure.string :only [split]]
         [clojure.tools.cli :only [cli]]
@@ -91,7 +92,7 @@
                                                   ["-r" "--replication-factor" :default -1 :parse-fn #(Integer/parseInt %)])
         meta (doto (SettableBlobMeta. acl)
                    (.set_replication_factor replication-factor))]
-    (validate-key-name! key)
+    (Utils/validateKeyName key)
     (log-message "Creating " key " with ACL " (pr-str (map access-control-str acl)))
     (if file
       (with-open [f (input-stream file)]

@@ -67,6 +67,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -116,6 +117,8 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import java.security.Principal;
+import org.apache.storm.logging.ThriftAccessLogger;
 
 public class Utils {
     // A singleton instance allows us to mock delegated static methods in our
@@ -153,8 +156,23 @@ public class Utils {
 
     public static Object newInstance(String klass) {
         try {
-            Class c = Class.forName(klass);
-            return c.newInstance();
+            LOG.info("Creating new instance for class {}", klass);
+            return newInstance(Class.forName(klass));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Object newInstance(Class klass) {
+        LOG.info("Inside other newInstance static method.");
+        return _instance.newInstanceImpl(klass);
+    }
+
+    // Non-static impl methods exist for mocking purposes.
+    public Object newInstanceImpl(Class klass) {
+        try {
+            LOG.info("Returning {}.newInstance()", klass);
+            return klass.newInstance();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -488,7 +506,11 @@ public class Utils {
         HashMap nconf = new HashMap(conf);
         // only enable cleanup of blobstore on nimbus
         nconf.put(Config.BLOBSTORE_CLEANUP_ENABLE, Boolean.TRUE);
-        store.prepare(nconf, baseDir, nimbusInfo);
+
+        if(store != null) {
+            // store can be null during testing when mocking utils.
+            store.prepare(nconf, baseDir, nimbusInfo);
+        }
         return store;
     }
 
@@ -1428,8 +1450,204 @@ public class Utils {
         return number & Integer.MAX_VALUE;
     }
 
+    /**
+     * Determines if a zip archive contains a particular directory.
+     *
+     * @param zipfile path to the zipped file
+     * @param target directory being looked for in the zip.
+     * @return boolean whether or not the directory exists in the zip.
+     */
+    public static boolean zipDoesContainDir(String zipfile, String target) throws IOException {
+        List<ZipEntry> entries = (List<ZipEntry>)Collections.list(new ZipFile(zipfile).entries());
+
+        if(entries == null) {
+            return false;
+        }
+
+        String targetDir = target + "/";
+        for(ZipEntry entry : entries) {
+            String name = entry.getName();
+            if(name.startsWith(targetDir)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Joins any number of maps together into a single map, combining their values into
+     * a list, maintaining values in the order the maps were passed in. Nulls are inserted
+     * for given keys when the map does not contain that key.
+     *
+     * i.e. joinMaps({'a' => 1, 'b' => 2}, {'b' => 3}, {'a' => 4, 'c' => 5}) ->
+     *      {'a' => [1, null, 4], 'b' => [2, 3, null], 'c' => [null, null, 5]}
+     *
+     * @param maps variable number of maps to join - order affects order of values in output.
+     * @return combined map
+     */
+    public static <K, V> Map<K, List<V>> joinMaps(Map<K, V>... maps) {
+        Map<K, List<V>> ret = new HashMap<>();
+
+        Set<K> keys = new HashSet<>();
+
+        for(Map<K, V> map : maps) {
+            keys.addAll(map.keySet());
+        }
+
+        for(Map<K, V> m : maps) {
+            for(K key : keys) {
+                V value = m.get(key);
+
+                if(!ret.containsKey(key)) {
+                    ret.put(key, new ArrayList<V>());
+                }
+
+                List<V> targetList = ret.get(key);
+                targetList.add(value);
+            }
+        }
+        return ret;
+    }
+
+    /**
+     * Fills up chunks out of a collection (given a maximum amount of chunks)
+     *
+     * i.e. partitionFixed(5, [1,2,3]) -> [[1,2,3]]
+     *      partitionFixed(5, [1..9]) -> [[1,2], [3,4], [5,6], [7,8], [9]]
+     *      partitionFixed(3, [1..10]) -> [[1,2,3,4], [5,6,7], [8,9,10]]
+     * @param maxNumChunks the maximum number of chunks to return
+     * @param coll the collection to be chunked up
+     * @return a list of the chunks, which are themselves lists.
+     */
+    public static <T> List<List<T>> partitionFixed(int maxNumChunks, Collection<T> coll) {
+        List<List<T>> ret = new ArrayList<>();
+
+        if(maxNumChunks == 0 || coll == null) {
+            return ret;
+        }
+
+        Map<Integer, Integer> parts = integerDivided(coll.size(), maxNumChunks);
+
+        // Keys sorted in descending order
+        List<Integer> sortedKeys = new ArrayList<Integer>(parts.keySet());
+        Collections.sort(sortedKeys, Collections.reverseOrder());
 
 
+        Iterator<T> it = coll.iterator();
+        for(Integer chunkSize : sortedKeys) {
+            if(!it.hasNext()) { break; }
+            Integer times = parts.get(chunkSize);
+            for(int i = 0; i < times; i++) {
+                if(!it.hasNext()) { break; }
+                List<T> chunkList = new ArrayList<>();
+                for(int j = 0; j < chunkSize; j++) {
+                    if(!it.hasNext()) { break; }
+                    chunkList.add(it.next());
+                }
+                ret.add(chunkList);
+            }
+        }
+
+        return ret;
+    }
+
+//    /**
+//     * Get a stack trace for the current thread
+//     *
+//     * @return a human-readable representation of the current thread's stack
+//     */
+//    public static String currentStackTrace() {
+//        StackTraceElement[] elems = Thread.currentThread().getStackTrace();
+//        List<String> lines = new ArrayList<String>();
+//
+//        for(StackTraceElement elem : elems) {
+//            lines.add(elem.toString());
+//        }
+//
+//        return String.join("\n", lines);
+//    }
+
+//    public static boolean iteratorDoesHaveNext(Iterator it) {
+//        return it != null && it.hasNext();
+//    }
+
+    public static final Pattern workerLogFilenamePattern = Pattern.compile("^worker.log(.*)");
+
+    public static Object getConfiguredClass(Map conf, Object configKey) {
+        if (conf.containsKey(configKey)) {
+            return newInstance((String)conf.get(configKey));
+        }
+        return null;
+    }
+
+    public static String logsFilename(String stormId, int port) {
+        return stormId + filePathSeparator + Integer.toString(port) + filePathSeparator + "worker.log";
+    }
+
+    public static String eventLogsFilename(String stormId, int port) {
+        return stormId + filePathSeparator + Integer.toString(port) + filePathSeparator + "events.log";
+    }
+
+    public static Object readYamlFile(String yamlFile) {
+        try (FileReader reader = new FileReader(yamlFile)) {
+            return new Yaml(new SafeConstructor()).load(reader);
+        }
+        catch(Exception ex) {
+            LOG.error("Failed to read yaml file.", ex);
+        }
+        return null;
+    }
+
+    public static void setupDefaultUncaughtExceptionHandler() {
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                public void uncaughtException(Thread thread, Throwable thrown) {
+                    try {
+                        handleUncaughtException(thrown);
+                    }
+                    catch (Error err) {
+                        LOG.error("Received error in main thread.. terminating server...", err);
+                        Runtime.getRuntime().exit(-2);
+                    }
+                }
+            });
+    }
+
+    public static Map redactValue(Map<Object, String> m, Object key) {
+        
+        if(m.containsKey(key)) {
+            HashMap<Object, String> newMap = new HashMap<>(m);
+            String value = newMap.get(key);
+            String redacted = new String(new char[value.length()]).replace("\0", "#");
+            newMap.put(key, redacted);
+            return newMap;
+        }
+        return m;
+    }
+
+    public static void logThriftAccess(Integer requestId, InetAddress remoteAddress, Principal principal, String operation) {
+        new ThriftAccessLogger().log(
+            String.format("Request ID: {} access from: {} principal: {} operation: {}",
+                          requestId, remoteAddress, principal, operation));
+    }
+
+    public static void validateKeyName(String name) {
+        Set<String> disallowedKeys = new HashSet<>();
+        disallowedKeys.add("/");
+        disallowedKeys.add(".");
+        disallowedKeys.add(":");
+        disallowedKeys.add("\\");
+
+        for(String key : disallowedKeys) {
+            if( name.contains(key) ) {
+                throw new RuntimeException("Key name cannot contain any of the following: " + disallowedKeys.toString());
+            }
+        }
+        if(name.trim().isEmpty()) {
+            throw new RuntimeException("Key name cannot be blank");
+        }
+    }
+    
     //Everything from here on is translated from the old util.clj (storm-core/src/clj/backtype.storm/util.clj)
 
     //Wraps an exception in a RuntimeException if needed
@@ -1462,17 +1680,13 @@ public class Utils {
             return null;
         } else {
             Iterator<Object> iter = coll.iterator();
-            if (iter==null || !iter.hasNext()) {
-                return null;
-            } else {
-                do {
-                    Object obj = iter.next();
-                    if (pred.test(obj)) {
-                        return obj;
-                    }
-                } while (iter.hasNext());
-                return null;
+            while(iter != null && iter.hasNext()) {
+                Object obj = iter.next();
+                if (pred.test(obj)) {
+                    return obj;
+                }
             }
+            return null;
         }
     }
 
@@ -1481,17 +1695,13 @@ public class Utils {
             return null;
         } else {
             Iterator<Object> iter = map.entrySet().iterator();
-            if (iter==null || !iter.hasNext()) {
-                return null;
-            } else {
-                do {
-                    Object obj = iter.next();
-                    if (pred.test(obj)) {
-                        return obj;
-                    }
-                } while (iter.hasNext());
-                return null;
+            while(iter != null && iter.hasNext()) {
+                Object obj = iter.next();
+                if (pred.test(obj)) {
+                    return obj;
+                }
             }
+            return null;
         }
     }
     /*
@@ -1510,6 +1720,7 @@ public class Utils {
         return _instance.localHostnameImpl();
     }
 
+    // Non-static impl methods exist for mocking purposes.
     protected String localHostnameImpl () throws UnknownHostException {
         return InetAddress.getLocalHost().getCanonicalHostName();
     }
@@ -1588,15 +1799,12 @@ public class Utils {
     }
 
     public static String toksToPath (Vector<String> toks) {
-        if (toks == null) {
+        if (toks == null || toks.size() == 0) {
             return "/";
         }
-        int length = toks.size();
-        if (length == 0) {
-            return "/";
-        }
+        
         String output = "";
-        for (int i = 0; i < length; i++) {
+        for (int i = 0; i < toks.size(); i++) {
             output = output + "/" + toks.get(i);
         }
         return output;
@@ -1606,17 +1814,17 @@ public class Utils {
     }
 
     /* TODO: This function was originally written to replace map-val in util.clj. But we decided to change the coding
-             style in the caller functions to a more Java style for loop. This is mentioned in TODOs across the clojure
-             files.
+             style in the caller functions to a more Java style for loop.
+
+             When translating clojure code that uses this method into Java, please do not use this method,
+             and instead inline the functionality.
      */
     public static Map mapVal (IFn aFn, Map amap) {
         Map newMap = new HashMap();
-        if (amap == null) {
+        if (amap == null || amap.keySet() == null) {
             return newMap;
         }
-        if (amap.keySet()==null) {
-            return newMap;
-        }
+
         for (Object key: amap.keySet()) {
             Object value = amap.get(key);
             if (value == null) {
@@ -1629,84 +1837,14 @@ public class Utils {
         return newMap;
     }
 
-    /* TODO: This function was originally written to replace map-val in util.clj. But we decided to change the coding
-         style in the caller functions to a more Java style for loop. This is mentioned in TODOs across the clojure
-         files.
-    */
-//    public static Map filterVal(IPredicate aFn, Map amap) {
-//        Map newMap = new HashMap();
-//        if (amap == null) {
-//            return newMap;
-//        }
-//        for (Object key: amap.keySet()) {
-//            Object value = amap.get(key);
-//            if(aFn.test(value)) {
-//                newMap.put(key, value);
-//            }
-//        }
-//        return newMap;
-//    }
-
-    /* TODO: This function was originally written to replace filter-key in util.clj. But we decided to change the coding
-         style in the caller functions to a more Java style for loop + if conditionals. This is mentioned in TODOs
-         across the clojure files.
-    */
-//    public static Map filterKey(IPredicate aFn, Map amap) {
-//        Map newMap = new HashMap();
-//        if (amap == null) {
-//            return newMap;
-//        }
-//        for (Object key: amap.keySet()) {
-//            Object value = amap.get(key);
-//            if(aFn.test(key)) {
-//                newMap.put(key, value);
-//            }
-//        }
-//        return newMap;
-//    }
-
-    /* TODO: This function was originally written to replace map-key in util.clj. But we decided to change the coding
-         style in the caller functions to a more Java style for loop. This is mentioned in TODOs across the clojure
-         files.
-    */
-//    public static Map mapKey (IFn aFn, Map amap) {
-//        Map newMap = new HashMap();
-//        if (amap == null) {
-//            return newMap;
-//        }
-//        for (Object key: amap.keySet()) {
-//            Object value = amap.get(key);
-//            Object newKey = aFn.eval(key);
-//            newMap.put(newKey, value);
-//        }
-//        return newMap;
-//    }
-
-    /* TODO: This function was originally written to replace separate in util.clj. But since it was only used in
-    transactional_test.clj, the separate function was moved there for now.
-    */
-    public static Vector<Collection> separate (IPredicate pred, Collection aseq) {
-        Vector<Collection> outputVector = new Vector<Collection>();
-        Collection pass = new HashSet();
-        Collection notPass = new HashSet();
-        for (Object obj: aseq) {
-            if (pred.test(obj)) {
-                pass.add(obj);
-            } else {
-                notPass.add(obj);
-            }
-        }
-        outputVector.add(pass);
-        outputVector.add(notPass);
-        return outputVector;
-    }
-
     public static void exitProcess (int val, Object... msg) {
-        String combinedErrorMessage = "";
+        StringBuilder errorMessage = new StringBuilder();
+        errorMessage.append("halting process: ");
         for (Object oneMessage: msg) {
-            combinedErrorMessage = combinedErrorMessage + oneMessage.toString();
+            errorMessage.append(oneMessage);
         }
-        LOG.error("halting process: " + combinedErrorMessage, new RuntimeException(combinedErrorMessage));
+        String combinedErrorMessage = errorMessage.toString();
+        LOG.error(combinedErrorMessage, new RuntimeException(combinedErrorMessage));
         Runtime.getRuntime().exit(val);
     }
 
@@ -1958,21 +2096,45 @@ public class Utils {
         return dir + filePathSeparator + "launch_container.sh";
     }
 
+    public static void throwRuntime (Object... strings) {
+        String combinedErrorMessage = "";
+        for (Object oneMessage: strings) {
+            combinedErrorMessage = combinedErrorMessage + oneMessage.toString();
+        }
+        throw new RuntimeException(combinedErrorMessage);
+    }
+
+    public static Object nullToZero (Object v) {
+        return (v!=null? v : 0);
+    }
+
+    public static Object containerGet (Container container) {
+        return container.object;
+    }
+
+    public static Container containerSet (Container container, Object obj) {
+        container.object = obj;
+        return container;
+    }
+
+
+
     /**
      * Deletes a file or directory and its contents if it exists. Does not
      * complain if the input is null or does not exist.
      * @param path the path to the file or directory
      */
-    public static void forceDelete(String path) {
+    public static void forceDelete(String path) throws IOException {
         _instance.forceDeleteImpl(path);
     }
 
-    protected void forceDeleteImpl(String path) {
+    // Non-static impl methods exist for mocking purposes.
+    protected void forceDeleteImpl(String path) throws IOException {
         LOG.debug("Deleting path {}", path);
         if (checkFileExists(path)) {
             try {
                 FileUtils.forceDelete(new File(path));
-            } catch (IOException ignored) {}
+            } catch (FileNotFoundException ignored) {}
         }
     }
 
@@ -2031,6 +2193,7 @@ public class Utils {
         return _instance.currentClasspathImpl();
     }
 
+    // Non-static impl methods exist for mocking purposes.
     public String currentClasspathImpl() {
         return System.getProperty("java.class.path");
     }
@@ -2040,14 +2203,19 @@ public class Utils {
      * @param dir the directory to search
      * @return the jar file names
      */
-    private static Collection<String> getFullJars(String dir) {
+    private static List<String> getFullJars(String dir) {
         File[] files = new File(dir).listFiles(new FilenameFilter() {
             @Override
             public boolean accept(File dir, String name) {
                 return name.endsWith(".jar");
             }
         });
-        Collection<String> ret = new HashSet<String>(files.length);
+        
+        if(files == null) {
+            return new ArrayList<>();
+        }
+        
+        List<String> ret = new ArrayList<>(files.length);
         for (File f : files) {
             ret.add(Paths.get(dir, f.getName()).toString());
         }
@@ -2073,7 +2241,7 @@ public class Utils {
         pathElements.add(stormConfDir);
 
         return StringUtils.join(pathElements,
-                System.getProperty("path.separator"));
+                classPathSeparator);
     }
 
     public static String addToClasspath(String classpath,
@@ -2081,6 +2249,7 @@ public class Utils {
         return _instance.addToClasspathImpl(classpath, paths);
     }
 
+    // Non-static impl methods exist for mocking purposes.
     public String addToClasspathImpl(String classpath,
                 Collection<String> paths) {
         if (paths == null || paths.isEmpty()) {
@@ -2089,7 +2258,28 @@ public class Utils {
         List<String> l = new LinkedList<>();
         l.add(classpath);
         l.addAll(paths);
-        return StringUtils.join(l, System.getProperty("path.separator"));
+        return StringUtils.join(l, classPathSeparator);
+    }
+
+    public static class UptimeComputer {
+        int startTime = 0;
+        
+        public UptimeComputer() {
+            startTime = Utils.currentTimeSecs();
+        }
+        
+        public int upTime() {
+            return Time.delta(startTime);
+        }
+    }
+
+    public static UptimeComputer makeUptimeComputer() {
+        return _instance.makeUptimeComputerImpl();
+    }
+
+    // Non-static impl methods exist for mocking purposes.
+    public UptimeComputer makeUptimeComputerImpl() {
+        return new UptimeComputer();
     }
 
     /**
