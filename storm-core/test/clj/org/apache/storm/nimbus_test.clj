@@ -1394,7 +1394,7 @@
           fake-inimbus (reify INimbus (getForcedScheduler [this] nil))
           fake-cu (proxy [ConfigUtils] []
                       (nimbusTopoHistoryStateImpl [conf] nil))
-          fake-utils (proxy [MockedUtils] []
+          fake-utils (proxy [Utils] []
                        (newInstanceImpl [_])
                        (makeUptimeComputer [] (proxy [Utils$UptimeComputer] []
                                                 (upTime [] 0))))]
