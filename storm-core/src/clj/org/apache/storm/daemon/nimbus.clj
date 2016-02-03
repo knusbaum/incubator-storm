@@ -116,7 +116,7 @@
 
                     (conf STORM-SCHEDULER)
                     (do (log-message "Using custom scheduler: " (conf STORM-SCHEDULER))
-                        (-> (conf STORM-SCHEDULER) (#(Utils/newInstance %))))
+                        (-> (conf STORM-SCHEDULER) Utils/newInstance))
 
                     :else
                     (do (log-message "Using default scheduler")
@@ -665,7 +665,6 @@
   (let [conf (:conf nimbus)
         blob-store (:blob-store nimbus)
         executors (compute-executors nimbus storm-id)
-        _ (log-message "EXECUTORS: " (pr-str executors))
         topology (read-storm-topology-as-nimbus storm-id blob-store)
         storm-conf (read-storm-conf-as-nimbus storm-id blob-store)
         task->component (storm-task-info topology storm-conf)

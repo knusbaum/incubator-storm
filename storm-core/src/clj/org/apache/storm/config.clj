@@ -16,7 +16,6 @@
 
 (ns org.apache.storm.config
   (:import [java.io FileReader File IOException]
-           [java.net URLEncoder]
            [org.apache.storm.generated StormTopology])
   (:import [org.apache.storm Config])
   (:import [org.apache.storm.utils Utils LocalState ConfigUtils MutableInt])
