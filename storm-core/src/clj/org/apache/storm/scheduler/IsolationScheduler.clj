@@ -17,7 +17,7 @@
   (:use [org.apache.storm util config log])
   (:require [org.apache.storm.scheduler.DefaultScheduler :as DefaultScheduler])
   (:import [java.util HashSet Set List LinkedList ArrayList Map HashMap]
-           [org.apache.storm.utils IFn])
+           [org.apache.storm.utils])
   (:import [org.apache.storm.utils Utils Container])
   (:import [org.apache.storm.scheduler IScheduler Topologies
             Cluster TopologyDetails WorkerSlot SchedulerAssignment
@@ -52,7 +52,6 @@
        (map vector (repeat-seq (range (.getNumWorkers details))))
        (group-by first)
        (map-val #(map second %))
-       ;(Utils/mapVal (reify IFn (eval [this x] (map second x))))
        vals
        (map set)
        (HashSet.)

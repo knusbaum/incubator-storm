@@ -22,7 +22,7 @@
             ExecutorInfo LSWorkerHeartbeat
             LSTopoHistory LSTopoHistoryList
             WorkerResources]
-           [org.apache.storm.utils Utils IFn])
+           [org.apache.storm.utils Utils])
   (:import [org.apache.storm.utils LocalState]))
 
 (def LS-WORKER-HEARTBEAT "worker-heartbeat")
@@ -109,9 +109,6 @@
 (defn ls-local-assignments!
   [^LocalState local-state assignments]
   (let [local-assignment-map (map-val ->LocalAssignment assignments)]
-;    (let [local-assignment-map (Utils/mapVal
-;                                 (reify IFn (eval [this x] (->LocalAssignment x)))
-;                                 assignments)]
     (.put local-state LS-LOCAL-ASSIGNMENTS
           (LSSupervisorAssignments. local-assignment-map))))
 
@@ -121,8 +118,6 @@
     (if-let [thrift-local-assignments (.get local-state LS-LOCAL-ASSIGNMENTS)]
       (map-val
         ->local-assignment
-        ;      (Utils/mapVal
-        ;        (reify IFn (eval [this x] (->LocalAssignment x)))
         (.get_assignments thrift-local-assignments))))
 
 (defn ls-worker-heartbeat!

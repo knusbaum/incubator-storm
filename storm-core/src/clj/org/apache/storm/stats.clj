@@ -23,7 +23,7 @@
             ComponentPageInfo ComponentType BoltAggregateStats
             ExecutorAggregateStats SpecificAggregateStats
             SpoutAggregateStats TopologyPageInfo TopologyStats])
-  (:import [org.apache.storm.utils Utils IFn])
+  (:import [org.apache.storm.utils Utils])
   (:import [org.apache.storm.metric.internal MultiCountStatAndMetric MultiLatencyStatAndMetric]
            [java.util Collection])
   (:use [org.apache.storm log util])
@@ -722,9 +722,6 @@
   [stats]
   (->> stats
     (map-val #(reduce + (vals %)))))
-;       (Utils/mapVal
-;         (reify IFn (eval [this x] (reduce + (vals x))))
-;         )))
 
 ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defn- agg-topo-exec-stats*

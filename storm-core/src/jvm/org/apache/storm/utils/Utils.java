@@ -1583,11 +1583,11 @@ public class Utils {
     }
 
     public static String logsFilename(String stormId, int port) {
-        return stormId + filePathSeparator + Integer.toString(port) + filePathSeparator + "worker.log";
+        return stormId + FILE_PATH_SEPARATOR + Integer.toString(port) + FILE_PATH_SEPARATOR + "worker.log";
     }
 
     public static String eventLogsFilename(String stormId, int port) {
-        return stormId + filePathSeparator + Integer.toString(port) + filePathSeparator + "events.log";
+        return stormId + FILE_PATH_SEPARATOR + Integer.toString(port) + FILE_PATH_SEPARATOR + "events.log";
     }
 
     public static Object readYamlFile(String yamlFile) {
@@ -1660,14 +1660,14 @@ public class Utils {
         }
     }
 
-    public static final boolean isOnWindows = "Windows_NT".equals(System.getenv("OS"));
+    public static final boolean IS_ON_WINDOWS = "Windows_NT".equals(System.getenv("OS"));
 
-    public static final String filePathSeparator = System.getProperty("file.separator");
+    public static final String FILE_PATH_SEPARATOR = System.getProperty("file.separator");
 
-    public static final String classPathSeparator = System.getProperty("path.separator");
+    public static final String CLASS_PATH_SEPARATOR = System.getProperty("path.separator");
 
-    public static final int sigKill = 9;
-    public static final int sigTerm = 15;
+    public static final int SIGKILL = 9;
+    public static final int SIGTERM = 15;
 
 
 
@@ -1803,7 +1803,7 @@ public class Utils {
         if (toks == null || toks.size() == 0) {
             return "/";
         }
-        
+
         String output = "";
         for (int i = 0; i < toks.size(); i++) {
             output = output + "/" + toks.get(i);
@@ -1812,30 +1812,6 @@ public class Utils {
     }
     public static String normalizePath (String path) {
         return toksToPath(tokenizePath(path));
-    }
-
-    /* TODO: This function was originally written to replace map-val in util.clj. But we decided to change the coding
-             style in the caller functions to a more Java style for loop.
-
-             When translating clojure code that uses this method into Java, please do not use this method,
-             and instead inline the functionality.
-     */
-    public static Map mapVal (IFn aFn, Map amap) {
-        Map newMap = new HashMap();
-        if (amap == null || amap.keySet() == null) {
-            return newMap;
-        }
-
-        for (Object key: amap.keySet()) {
-            Object value = amap.get(key);
-            if (value == null) {
-                newMap.put(key, null);
-            } else {
-                Object newValue = aFn.eval(value);
-                newMap.put(key, newValue);
-            }
-        }
-        return newMap;
     }
 
     public static void exitProcess (int val, Object... msg) {
@@ -2018,7 +1994,7 @@ public class Utils {
         try {
             String killString = null;
             if (onWindows()) {
-                if (signum == sigKill) {
+                if (signum == SIGKILL) {
                     killString = "taskkill /f /pid ";
                 } else {
                     killString = "taskkill /pid ";
@@ -2038,18 +2014,18 @@ public class Utils {
     }
 
     public static int forceKillProcess (long pid) {
-        return sendSignalToProcess(pid, sigKill);
+        return sendSignalToProcess(pid, SIGKILL);
     }
 
     public static int forceKillProcess (String pid) {
-        return sendSignalToProcess(Long.parseLong(pid), sigKill);
+        return sendSignalToProcess(Long.parseLong(pid), SIGKILL);
     }
 
     public static int killProcessWithSigTerm (long pid) {
-        return sendSignalToProcess(pid, sigTerm);
+        return sendSignalToProcess(pid, SIGTERM);
     }
     public static int killProcessWithSigTerm (String pid) {
-        return sendSignalToProcess(Long.parseLong(pid), sigTerm);
+        return sendSignalToProcess(Long.parseLong(pid), SIGTERM);
     }
 
     /*
@@ -2090,11 +2066,11 @@ public class Utils {
     }
 
     public static String scriptFilePath (String dir) {
-        return dir + filePathSeparator + "storm-worker-script.sh";
+        return dir + FILE_PATH_SEPARATOR + "storm-worker-script.sh";
     }
 
     public static String containerFilePath (String dir) {
-        return dir + filePathSeparator + "launch_container.sh";
+        return dir + FILE_PATH_SEPARATOR + "launch_container.sh";
     }
 
     public static void throwRuntime (Object... strings) {
@@ -2242,7 +2218,7 @@ public class Utils {
         pathElements.add(stormConfDir);
 
         return StringUtils.join(pathElements,
-                classPathSeparator);
+                CLASS_PATH_SEPARATOR);
     }
 
     public static String addToClasspath(String classpath,
@@ -2259,7 +2235,7 @@ public class Utils {
         List<String> l = new LinkedList<>();
         l.add(classpath);
         l.addAll(paths);
-        return StringUtils.join(l, classPathSeparator);
+        return StringUtils.join(l, CLASS_PATH_SEPARATOR);
     }
 
     public static class UptimeComputer {

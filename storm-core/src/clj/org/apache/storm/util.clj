@@ -47,21 +47,8 @@
   (:require [ring.util.codec :as codec])
   (:use [org.apache.storm log]))
 
-;(defn wrap-in-runtime
-;  "Wraps an exception in a RuntimeException if needed"
-;  [^Exception e]
-;  (if (instance? RuntimeException e)
-;    e
-;    (RuntimeException. e)))
-
 (def on-windows?
   (= "Windows_NT" (System/getenv "OS")))
-
-;(def file-path-separator
-;  (System/getProperty "file.separator"))
-
-;(def class-path-separator
-;  (System/getProperty "path.separator"))
 
 (defn is-absolute-path? [path]
   (.isAbsolute (Paths/get path (into-array String []))))
@@ -212,18 +199,6 @@
                true (throw ~error-local)
                )))))
 
-;(defn local-hostname
-;  []
-;  (.getCanonicalHostName (InetAddress/getLocalHost)))
-;
-;(def memoized-local-hostname (memoize local-hostname))
-
-;; checks conf for STORM_LOCAL_HOSTNAME.
-;; when unconfigured, falls back to (memoized) guess by `local-hostname`.
-;(defn hostname
-;  [conf]
-;  (conf Config/STORM_LOCAL_HOSTNAME (memoized-local-hostname)))
-
 (letfn [(try-port [port]
                   (with-open [socket (java.net.ServerSocket. port)]
                     (.getLocalPort socket)))]
@@ -234,21 +209,6 @@
        (try-port preferred)
        (catch java.io.IOException e
          (available-port))))))
-
-;(defn uuid []
-;  (str (UUID/randomUUID)))
-
-;(defn current-time-secs
-;  []
-;  (Time/currentTimeSecs))
-
-;(defn current-time-millis
-;  []
-;  (Time/currentTimeMillis))
-
-;(defn secs-to-millis-long
-;  [secs]
-;  (long (* (long 1000) secs)))
 
 (defn clojurify-structure
   [s]
@@ -272,35 +232,6 @@
        (finally
          (.release lock#)
          (.close rf#)))))
-
-;(defn tokenize-path
-;  [^String path]
-;  (let [toks (.split path "/")]
-;    (vec (filter (complement empty?) toks))))
-
-;(defn assoc-conj
-;  [m k v]
-;  (merge-with concat m {k [v]}))
-
-;; returns [ones in first set not in second, ones in second set not in first]
-;(defn set-delta
-;  [old curr]
-;  (let [s1 (set old)
-;        s2 (set curr)]
-;    [(set/difference s1 s2) (set/difference s2 s1)]))
-
-;(defn parent-path
-;  [path]
-;  (let [toks (Utils/tokenizePath path)]
-;    (str "/" (str/join "/" (butlast toks)))))
-
-;(defn toks->path
-;  [toks]
-;  (str "/" (str/join "/" toks)))
-
-;(defn normalize-path
-;  [^String path]
-;  (Utils/toksToPath (Utils/tokenizePath path)))
 
 ;TODO: We're keeping this function around until all the code using it is properly tranlated to java
 ;TODO: by properly having the for loop IN THE JAVA FUNCTION that originally used this function.
@@ -328,139 +259,15 @@
   [afn amap]
   (into {} (for [[k v] amap] [(afn k) v])))
 
-;(defn full-path
-;  [parent name]
-;  (let [toks (Utils/tokenizePath parent)]
-;    (Utils/toksToPath (conj toks name))))
-
 ;TODO: Once all the other clojure functions (100+ locations) are translated to java, this function becomes moot.
 (def not-nil? (complement nil?))
-
-;(defn exit-process!
-;  [val & msg]
-;  (log-error (RuntimeException. (str msg)) "Halting process: " msg)
-;  (.exit (Runtime/getRuntime) val))
-
-;(defn sum
-;  [vals]
-;  (reduce + vals))
-
-;(defn repeat-seq
-;  ([aseq]
-;   (apply concat (repeat aseq)))
-;  ([amt aseq]
-;   (apply concat (repeat amt aseq))))
-
-;(defn div
-;  "Perform floating point division on the arguments."
-;  [f & rest]
-;  (apply / (double f) rest))
-
-;(defn defaulted
-;  [val default]
-;  (if val val default))
-
-;(defn mk-counter
-;  ([] (mk-counter 1))
-;  ([start-val]
-;   (let [val (atom (dec start-val))]
-;     (fn [] (swap! val inc)))))
-
-;(defmacro for-times [times & body]
-;  `(for [i# (range ~times)]
-;     ~@body))
 
 (defmacro dofor [& body]
   `(doall (for ~@body)))
 
-;(defn reverse-map
-;  "{:a 1 :b 1 :c 2} -> {1 [:a :b] 2 :c}"
-;  [amap]
-;  (reduce (fn [m [k v]]
-;            (let [existing (get m v [])]
-;              (assoc m v (conj existing k))))
-;          {} amap))
-
 (defmacro print-vars [& vars]
   (let [prints (for [v vars] `(println ~(str v) ~v))]
     `(do ~@prints)))
-
-;(defn process-pid
-;  "Gets the pid of this JVM. Hacky because Java doesn't provide a real way to do this."
-;  []
-;  (let [name (.getName (ManagementFactory/getRuntimeMXBean))
-;        split (.split name "@")]
-;    (when-not (= 2 (count split))
-;      (throw (RuntimeException. (str "Got unexpected process name: " name))))
-;    (first split)))
-
-;(defn exec-command! [command]
-;  (let [[comm-str & args] (seq (.split command " "))
-;        command (CommandLine. comm-str)]
-;    (doseq [a args]
-;      (.addArgument command a))
-;    (.execute (DefaultExecutor.) command)))
-
-;(defn extract-dir-from-jar [jarpath dir destdir]
-;  (try-cause
-;    (with-open [jarpath (ZipFile. jarpath)]
-;      (let [entries (enumeration-seq (.entries jarpath))]
-;        (doseq [file (filter (fn [entry](and (not (.isDirectory entry)) (.startsWith (.getName entry) dir))) entries)]
-;          (.mkdirs (.getParentFile (File. destdir (.getName file))))
-;          (with-open [out (FileOutputStream. (File. destdir (.getName file)))]
-;            (io/copy (.getInputStream jarpath file) out)))))
-;    (catch IOException e
-;      (log-message "Could not extract " dir " from " jarpath))))
-
-;(defn sleep-secs [secs]
-;  (when (pos? secs)
-;    (Time/sleep (* (long secs) 1000))))
-
-;(defn sleep-until-secs [target-secs]
-;  (Time/sleepUntil (* (long target-secs) 1000)))
-
-;(def ^:const sig-kill 9)
-;
-;(def ^:const sig-term 15)
-
-;(defn send-signal-to-process
-;  [pid signum]
-;  (try-cause
-;    (Utils/execCommand (str (if on-windows?
-;                          (if (== signum sig-kill) "taskkill /f /pid " "taskkill /pid ")
-;                          (str "kill -" signum " "))
-;                     pid))
-;    (catch ExecuteException e
-;      (log-message "Error when trying to kill " pid ". Process is probably already dead."))))
-
-;(defn read-and-log-stream
-;  [prefix stream]
-;  (try
-;    (let [reader (BufferedReader. (InputStreamReader. stream))]
-;      (loop []
-;        (if-let [line (.readLine reader)]
-;                (do
-;                  (log-warn (str prefix ":" line))
-;                  (recur)))))
-;    (catch IOException e
-;      (log-warn "Error while trying to log stream" e))))
-
-;(defn force-kill-process
-;  [pid]
-;  (send-signal-to-process pid sig-kill))
-
-;(defn kill-process-with-sig-term
-;  [pid]
-;  (send-signal-to-process pid sig-term))
-
-;(defn add-shutdown-hook-with-force-kill-in-1-sec
-;  "adds the user supplied function as a shutdown hook for cleanup.
-;   Also adds a function that sleeps for a second and then sends kill -9 to process to avoid any zombie process in case
-;   cleanup function hangs."
-;  [func]
-;  (.addShutdownHook (Runtime/getRuntime) (Thread. #(func)))
-;  (.addShutdownHook (Runtime/getRuntime) (Thread. #((Time/sleepSecs 1)
-;                                                    (.halt (Runtime/getRuntime) 20)))))
 
 (defprotocol SmartThread
   (start [this])
@@ -519,407 +326,33 @@
 ;    (map #(str \' (clojure.string/escape % {\' "'\"'\"'"}) \'))
 ;      (clojure.string/join " ")))
 
-;(defn script-file-path [dir]
-;  (str dir Utils/filePathSeparator "storm-worker-script.sh"))
-
-;(defn container-file-path [dir]
-;  (str dir Utils/filePathSeparator "launch_container.sh"))
-
-;; (defnk write-script
-;;   [dir command :environment {}]
-;;   (let [script-src (str "#!/bin/bash\n" (clojure.string/join "" (map (fn [[k v]] (str (Utils/shellCmd ["export" (str k "=" v)]) ";\n")) environment)) "\nexec " (Utils/shellCmd command) ";")
-;;         script-path (Utils/scriptFilePath dir)
-;;         _ (spit script-path script-src)]
-;;     script-path
-;;   ))
-
-;; (defnk launch-process
-;;   [command :environment {} :log-prefix nil :exit-code-callback nil :directory nil]
-;;   (let [builder (ProcessBuilder. command)
-;;         process-env (.environment builder)]
-;;     (when directory (.directory builder directory))
-;;     (.redirectErrorStream builder true)
-;;     (doseq [[k v] environment]
-;;       (.put process-env k v))
-;;     (let [process (.start builder)]
-;;       (if (or log-prefix exit-code-callback)
-;;         (Utils/asyncLoop
-;;          (fn []
-;;            (if log-prefix
-;;              (Utils/readAndLogStream log-prefix (.getInputStream process)))
-;;            (when exit-code-callback
-;;              (try
-;;                (.waitFor process)
-;;                (catch InterruptedException e
-;;                  (log-message log-prefix " interrupted.")))
-;;              (exit-code-callback (.exitValue process)))
-;;            nil)))
-;;       process)))
-   
-;; (defn exists-file?
-;;   [path]
-;;   (.exists (File. path)))
-;; 
-;; (defn rmr
-;;   [path]
-;;   (log-debug "Rmr path " path)
-;;   (when (exists-file? path)
-;;     (try
-;;       (FileUtils/forceDelete (File. path))
-;;       (catch FileNotFoundException e))))
-;; 
-;; (defn rmpath
-;;   "Removes file or directory at the path. Not recursive. Throws exception on failure"
-;;   [path]
-;;   (log-debug "Removing path " path)
-;;   (when (exists-file? path)
-;;     (let [deleted? (.delete (File. path))]
-;;       (when-not deleted?
-;;         (throw (RuntimeException. (str "Failed to delete " path)))))))
-;; 
-;; (defn local-mkdirs
-;;   [path]
-;;   (log-debug "Making dirs at " path)
-;;   (FileUtils/forceMkdir (File. path)))
-;; 
-;; (defn touch
-;;   [path]
-;;   (log-debug "Touching file at " path)
-;;   (let [success? (do (if on-windows? (.mkdirs (.getParentFile (File. path))))
-;;                    (.createNewFile (File. path)))]
-;;     (when-not success?
-;;       (throw (RuntimeException. (str "Failed to touch " path))))))
-;; 
-;; (defn create-symlink!
-;;   "Create symlink is to the target"
-;;   ([path-dir target-dir file-name]
-;;     (create-symlink! path-dir target-dir file-name file-name))
-;;   ([path-dir target-dir from-file-name to-file-name]
-;;     (let [path (str path-dir Utils/filePathSeparator from-file-name)
-;;           target (str target-dir Utils/filePathSeparator to-file-name)
-;;           empty-array (make-array String 0)
-;;           attrs (make-array FileAttribute 0)
-;;           abs-path (.toAbsolutePath (Paths/get path empty-array))
-;;           abs-target (.toAbsolutePath (Paths/get target empty-array))]
-;;       (log-debug "Creating symlink [" abs-path "] to [" abs-target "]")
-;;       (if (not (.exists (.toFile abs-path)))
-;;         (Files/createSymbolicLink abs-path abs-target attrs)))))
-;; 
-;; (defn read-dir-contents
-;;   [dir]
-;;   (if (exists-file? dir)
-;;     (let [content-files (.listFiles (File. dir))]
-;;       (map #(.getName ^File %) content-files))
-;;     []))
-;; 
-;; (defn compact
-;;   [aseq]
-;;   (filter (complement nil?) aseq))
-;; 
-;; (defn current-classpath
-;;   []
-;;   (System/getProperty "java.class.path"))
-;; 
-;; (defn get-full-jars
-;;   [dir]
-;;   (map #(str dir Utils/filePathSeparator %) (filter #(.endsWith % ".jar") (read-dir-contents dir))))
-;; 
-;; (defn worker-classpath
-;;   []
-;;   (let [storm-dir (System/getProperty "storm.home")
-;;         storm-lib-dir (str storm-dir Utils/filePathSeparator "lib")
-;;         storm-conf-dir (if-let [confdir (System/getenv "STORM_CONF_DIR")]
-;;                          confdir 
-;;                          (str storm-dir Utils/filePathSeparator "conf"))
-;;         storm-extlib-dir (str storm-dir Utils/filePathSeparator "extlib")
-;;         extcp (System/getenv "STORM_EXT_CLASSPATH")]
-;;     (if (nil? storm-dir) 
-;;       (current-classpath)
-;;       (str/join Utils/classPathSeparator
-;;                 (remove nil? (concat (get-full-jars storm-lib-dir) (get-full-jars storm-extlib-dir) [extcp] [storm-conf-dir]))))))
-;; 
-;; (defn add-to-classpath
-;;   [classpath paths]
-;;   (if (empty? paths)
-;;     classpath
-;;     (str/join Utils/classPathSeparator (cons classpath paths))))
-;; 
-;; (defn ^ReentrantReadWriteLock mk-rw-lock
-;;   []
-;;   (ReentrantReadWriteLock.))
-;; 
-;; (defmacro read-locked
-;;   [rw-lock & body]
-;;   (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
-;;     `(let [rlock# (.readLock ~lock)]
-;;        (try (.lock rlock#)
-;;          ~@body
-;;          (finally (.unlock rlock#))))))
-;; 
-;; (defmacro write-locked
-;;   [rw-lock & body]
-;;   (let [lock (with-meta rw-lock {:tag `ReentrantReadWriteLock})]
-;;     `(let [wlock# (.writeLock ~lock)]
-;;        (try (.lock wlock#)
-;;          ~@body
-;;          (finally (.unlock wlock#))))))
-;; 
-;; (defn time-delta
-;;   [time-secs]
-;;   (- (Utils/currentTimeSecs) time-secs))
-;; 
-;; (defn time-delta-ms
-;;   [time-ms]
-;;   (- (System/currentTimeMillis) (long time-ms)))
-;; 
-;; (defn parse-int
-;;   [str]
-;;   (Integer/valueOf str))
-;; 
-;; (defn integer-divided
-;;   [sum num-pieces]
-;;   (clojurify-structure (Utils/integerDivided sum num-pieces)))
-;; 
-;; (defn collectify
-;;   [obj]
-;;   (if (or (sequential? obj) (instance? Collection obj))
-;;     obj
-;;     [obj]))
-;; 
-;; (defn to-json
-;;   [obj]
-;;   (JSONValue/toJSONString obj))
-;; 
-;; (defn from-json
-;;   [^String str]
-;;   (if str
-;;     (clojurify-structure
-;;       (JSONValue/parse str))
-;;     nil))
-;; 
-;; (defmacro letlocals
-;;   [& body]
-;;   (let [[tobind lexpr] (split-at (dec (count body)) body)
-;;         binded (vec (mapcat (fn [e]
-;;                               (if (and (list? e) (= 'bind (first e)))
-;;                                 [(second e) (last e)]
-;;                                 ['_ e]
-;;                                 ))
-;;                             tobind))]
-;;     `(let ~binded
-;;        ~(first lexpr))))
-;; 
-;; (defn remove-first
-;;   [pred aseq]
-;;   (let [[b e] (split-with (complement pred) aseq)]
-;;     (when (empty? e)
-;;       (throw (IllegalArgumentException. "Nothing to remove")))
-;;     (concat b (rest e))))
-;; 
-;; (defn assoc-non-nil
-;;   [m k v]
-;;   (if v (assoc m k v) m))
-;; 
-;; (defn multi-set
-;;   "Returns a map of elem to count"
-;;   [aseq]
-;;   (apply merge-with +
-;;          (map #(hash-map % 1) aseq)))
-;; 
-;; (defn set-var-root*
-;;   [avar val]
-;;   (alter-var-root avar (fn [avar] val)))
-;; 
-;; (defmacro set-var-root
-;;   [var-sym val]
-;;   `(set-var-root* (var ~var-sym) ~val))
-;; 
-;; (defmacro with-var-roots
-;;   [bindings & body]
-;;   (let [settings (partition 2 bindings)
-;;         tmpvars (repeatedly (count settings) (partial gensym "old"))
-;;         vars (map first settings)
-;;         savevals (vec (mapcat (fn [t v] [t v]) tmpvars vars))
-;;         setters (for [[v s] settings] `(set-var-root ~v ~s))
-;;         restorers (map (fn [v s] `(set-var-root ~v ~s)) vars tmpvars)]
-;;     `(let ~savevals
-;;        ~@setters
-;;        (try
-;;          ~@body
-;;          (finally
-;;            ~@restorers)))))
-
-;;(defn map-diff
-;;  "Returns mappings in m2 that aren't in m1"
-;;  [m1 m2]
-;;  (into {} (filter (fn [[k v]] (not= v (m1 k))) m2)))
-
-;(defn select-keys-pred
-;  [pred amap]
-;  (into {} (filter (fn [[k v]] (pred k)) amap)))
-
-;(defn rotating-random-range
-;  [choices]
-;  (let [rand (Random.)
-;        choices (ArrayList. choices)]
-;    (Collections/shuffle choices rand)
-;    [(MutableInt. -1) choices rand]))
-
-;(defn acquire-random-range-id
-;  [[^MutableInt curr ^List state ^Random rand]]
-;  (when (>= (.increment curr) (.size state))
-;    (.set curr 0)
-;    (Collections/shuffle state rand))
-;  (.get state (.get curr)))
-
-;; this can be rewritten to be tail recursive
-;(defn interleave-all
-;  [& colls]
-;  (if (empty? colls)
-;    []
-;    (let [colls (filter (complement empty?) colls)
-;          my-elems (map first colls)
-;          rest-elems (apply interleave-all (map rest colls))]
-;      (concat my-elems rest-elems))))
-
-;(defn between?
-;  "val >= lower and val <= upper"
-;  [val lower upper]
-;  (and (>= val lower)
-;       (<= val upper)))
-
-;(defmacro benchmark
-;  [& body]
-;  `(let [l# (doall (range 1000000))]
-;     (time
-;       (doseq [i# l#]
-;         ~@body))))
-
-;(defn rand-sampler
-;  [freq]
-;  (let [r (java.util.Random.)]
-;    (fn [] (= 0 (.nextInt r freq)))))
-
-;(defn even-sampler
-;  [freq]
-;  (let [freq (int freq)
-;        start (int 0)
-;        r (java.util.Random.)
-;        curr (MutableInt. -1)
-;        target (MutableInt. (.nextInt r freq))]
-;    (with-meta
-;      (fn []
-;        (let [i (.increment curr)]
-;          (when (>= i freq)
-;            (.set curr start)
-;            (.set target (.nextInt r freq))))
-;        (= (.get curr) (.get target)))
-;      {:rate freq})))
-
-;(defn sampler-rate
-;  [sampler]
-;  (:rate (meta sampler)))
-
-;(defn class-selector
-;  [obj & args]
-;  (class obj))
-
-;(defn uptime-computer []
-;  (let [start-time (Utils/currentTimeSecs)]
-;    (fn [] (Time/delta start-time))))
-
-;(defn stringify-error [error]
-;  (let [result (StringWriter.)
-;        printer (PrintWriter. result)]
-;    (.printStackTrace error printer)
-;    (.toString result)))
-
-;(defn nil-to-zero
-;  [v]
-;  (or v 0))
-
-;(defn bit-xor-vals
-;  [vals]
-;  (reduce bit-xor 0 vals))
+(defnk launch-process
+  [command :environment {} :log-prefix nil :exit-code-callback nil :directory nil]
+  (let [builder (ProcessBuilder. command)
+        process-env (.environment builder)]
+    (when directory (.directory builder directory))
+    (.redirectErrorStream builder true)
+    (doseq [[k v] environment]
+      (.put process-env k v))
+    (let [process (.start builder)]
+      (if (or log-prefix exit-code-callback)
+        (async-loop
+         (fn []
+           (if log-prefix
+             (Utils/readAndLogStream log-prefix (.getInputStream process)))
+           (when exit-code-callback
+             (try
+               (.waitFor process)
+               (catch InterruptedException e
+                 (log-message log-prefix " interrupted.")))
+             (exit-code-callback (.exitValue process)))
+           nil)))                    
+      process)))
 
 (defmacro with-error-reaction
   [afn & body]
   `(try ~@body
      (catch Throwable t# (~afn t#))))
-
-;(defn container
-;  []
-;  (Container.))
-
-;(defn container-set! [^Container container obj]
-;  (set! (. container object) obj)
-;  container)
-
-;(defn container-get [^Container container]
-;  (. container object))
-
-;(defn to-millis [secs]
-;  (* 1000 (long secs)))
-
-;(defn throw-runtime [& strs]
-;  (throw (RuntimeException. (apply str strs))))
-
-;(defn redirect-stdio-to-slf4j!
-;  []
-;  ;; set-var-root doesn't work with *out* and *err*, so digging much deeper here
-;  ;; Unfortunately, this code seems to work at the REPL but not when spawned as worker processes
-;  ;; it might have something to do with being a child process
-;  ;; (set! (. (.getThreadBinding RT/OUT) val)
-;  ;;       (java.io.OutputStreamWriter.
-;  ;;         (log-stream :info "STDIO")))
-;  ;; (set! (. (.getThreadBinding RT/ERR) val)
-;  ;;       (PrintWriter.
-;  ;;         (java.io.OutputStreamWriter.
-;  ;;           (log-stream :error "STDIO"))
-;  ;;         true))
-;  (log-capture! "STDIO"))
-
-;(defn spy
-;  [prefix val]
-;  (log-message prefix ": " val)
-;  val)
-
-;; end of batch 4
-
-;(defn url-encode
-;  [s]
-;  (codec/url-encode s))
-
-;(defn url-decode
-;  [s]
-;  (codec/url-decode s))
-
-;(defn join-maps
-;  [& maps]
-;  (let [all-keys (apply set/union (for [m maps] (-> m keys set)))]
-;    (into {} (for [k all-keys]
-;               [k (for [m maps] (m k))]))))
-
-;(defn partition-fixed
-;  [max-num-chunks aseq]
-;  (if (zero? max-num-chunks)
-;    []
-;    (let [chunks (->> (Utils/integerDivided (count aseq) max-num-chunks)
-;                      clojurify-structure
-;                      (#(dissoc % 0))
-;                      (sort-by (comp - first))
-;                      (mapcat (fn [[size amt]] (repeat amt size)))
-;                      )]
-;      (loop [result []
-;             [chunk & rest-chunks] chunks
-;             data aseq]
-;        (if (nil? chunk)
-;          result
-;          (let [[c rest-data] (split-at chunk data)]
-;            (recur (conj result c)
-;                   rest-chunks
-;                   rest-data)))))))
-
 
 ;; The following two will go away when worker, task, executor go away.
 (defn assoc-apply-self [curr key afn]
@@ -927,37 +360,18 @@
 
 (defmacro recursive-map
   [& forms]
-  (->> (partition 2 forms)
-       (map (fn [[key form]] `(assoc-apply-self ~key (fn [~'<>] ~form))))
-       (concat `(-> {}))))
+    (->> (partition 2 forms)
+         (map (fn [[key form]] `(assoc-apply-self ~key (fn [~'<>] ~form))))
+         (concat `(-> {}))))
 
-;(defn current-stack-trace
-;  []
-;  (->> (Thread/currentThread)
-;       .getStackTrace
-;       (map str)
-;       (str/join "\n")))
-
-;(defn get-iterator
-;  [^Iterable alist]
-;  (if alist (.iterator alist)))
-
-;(defn iter-has-next?
-;  [^Iterator iter]
-;  (if iter (.hasNext iter) false))
-
-;(defn iter-next
-;  [^Iterator iter]
-;  (.next iter))
-
-; These six following will go away later. To be replaced by native java loops.
+; These six following will go away later. To be replaced by inline java loops.
 (defmacro fast-list-iter
   [pairs & body]
   (let [pairs (partition 2 pairs)
         lists (map second pairs)
         elems (map first pairs)
         iters (map (fn [_] (gensym)) lists)
-        bindings (->> (map (fn [i l] [i `(if ~l (.iterator ~l))]) iters lists)
+        bindings (->> (map (fn [i l] (let [lg (gensym)] [lg l i `(if ~lg (.iterator ~lg))])) iters lists)
                       (apply concat))
         tests (map (fn [i] `(and ~i (.hasNext ^Iterator ~i))) iters)
         assignments (->> (map (fn [e i] [e `(.next ^Iterator ~i)]) elems iters)
@@ -967,27 +381,12 @@
          (let [~@assignments]
            ~@body)))))
 
-;(defn fast-list-map
-;  [afn alist]
-;  (let [ret (ArrayList.)]
-;    (fast-list-iter [e alist]
-;                    (.add ret (afn e)))
-;    ret))
-
 (defmacro fast-list-for
   [[e alist] & body]
   `(let [ret# (ArrayList.)]
      (fast-list-iter [~e ~alist]
                      (.add ret# (do ~@body)))
      ret#))
-
-;(defn map-iter
-;  [^Map amap]
-;  (if amap (-> amap .entrySet .iterator)))
-
-;(defn convert-entry
-;  [^Map$Entry entry]
-;  [(.getKey entry) (.getValue entry)])
 
 (defmacro fast-map-iter
   [[bind amap] & body]
@@ -996,20 +395,6 @@
        (let [entry# (.next ^Iterator iter#)
              ~bind [(.getKey ^Map$Entry entry#) (.getValue ^Map$Entry entry#)]]
          ~@body))))
-
-;(defn fast-first
-;  [^List alist]
-;  (.get alist 0));
-
-;(defmacro get-with-default
-;  [amap key default-val]
-;  `(let [curr# (.get ~amap ~key)]
-;     (if curr#
-;       curr#
-;       (do
-;         (let [new# ~default-val]
-;           (.put ~amap ~key new#)
-;           new#)))))
 
 (defn fast-group-by
   [afn alist]
@@ -1026,15 +411,6 @@
         (.add curr e)))
     ret))
 
-;(defn new-instance
-;  [klass]
-;  (let [klass (if (string? klass) (Class/forName klass) klass)]
-;    (.newInstance klass)))
-
-;(defn get-configured-class
-;  [conf config-key]
-;  (if (.get conf config-key) (new-instance (.get conf config-key)) nil))
-
 (defmacro -<>
   ([x] x)
   ([x form] (if (seq? form)
@@ -1045,75 +421,6 @@
               (list form x)))
   ([x form & more] `(-<> (-<> ~x ~form) ~@more)))
 
-;(defn logs-filename
-;  [storm-id port]
-;  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "worker.log"))
-
-;(def worker-log-filename-pattern #"^worker.log(.*)")
-
-;(defn event-logs-filename
-;  [storm-id port]
-;  (str storm-id Utils/filePathSeparator port Utils/filePathSeparator "events.log"))
-
-;(defn clojure-from-yaml-file [yamlFile]
-;  (try
-;    (with-open [reader (java.io.FileReader. yamlFile)]
-;      (clojurify-structure (.load (Yaml. (SafeConstructor.)) reader)))
-;    (catch Exception ex
-;      (log-error ex))));
-
 (defn hashmap-to-persistent [^HashMap m]
   (zipmap (.keySet m) (.values m)))
 
-;(defn retry-on-exception
-;  "Retries specific function on exception based on retries count"
-;  [retries task-description f & args]
-;  (let [res (try {:value (apply f args)}
-;              (catch Exception e
-;                (if (<= 0 retries)
-;                  (throw e)
-;                  {:exception e})))]
-;    (if (:exception res)
-;      (do 
-;        (log-error (:exception res) (str "Failed to " task-description ". Will make [" retries "] more attempts."))
-;        (recur (dec retries) task-description f args))
-;      (do 
-;        (log-debug (str "Successful " task-description "."))
-;        (:value res)))))
-;
-;(defn setup-default-uncaught-exception-handler
-;  "Set a default uncaught exception handler to handle exceptions not caught in other threads."
-;  []
-;  (Thread/setDefaultUncaughtExceptionHandler
-;    (proxy [Thread$UncaughtExceptionHandler] []
-;      (uncaughtException [thread thrown]
-;        (try
-;          (Utils/handleUncaughtException thrown)
-;          (catch Error err
-;            (do
-;              (log-error err "Received error in main thread.. terminating server...")
-;              (.exit (Runtime/getRuntime) -2))))))))
-;
-;(defn redact-value
-;  "Hides value for k in coll for printing coll safely"
-;  [coll k]
-;  (if (contains? coll k)
-;    (assoc coll k (apply str (repeat (count (coll k)) "#")))
-;    coll))
-;
-;(defn log-thrift-access
-;  [request-id remoteAddress principal operation]
-;  (doto
-;    (ThriftAccessLogger.)
-;    (.log (str "Request ID: " request-id " access from: " remoteAddress " principal: " principal " operation: " operation))))
-;
-;(def DISALLOWED-KEY-NAME-STRS #{"/" "." ":" "\\"})
-;
-;(defn validate-key-name!
-;  [name]
-;  (if (some #(.contains name %) DISALLOWED-KEY-NAME-STRS)
-;    (throw (RuntimeException.
-;             (str "Key name cannot contain any of the following: " (pr-str DISALLOWED-KEY-NAME-STRS))))
-;    (if (clojure.string/blank? name)
-;      (throw (RuntimeException.
-;               ("Key name cannot be blank"))))))

@@ -23,13 +23,12 @@
   (:import [org.apache.storm.scheduler ISupervisor])
   (:import [org.apache.storm.utils Utils$UptimeComputer ConfigUtils])
   (:import [org.apache.storm.generated RebalanceOptions])
-  (:import [org.mockito Matchers Mockito])
+  (:import [org.apache.storm.testing.staticmocking MockedConfigUtils])
   (:import [java.util UUID])
   (:import [java.io File])
   (:import [java.nio.file Files])
   (:import [org.apache.storm.utils Utils IPredicate]
-           [org.apache.storm.utils.staticmocking UtilsInstaller
-                                                 ConfigUtilsInstaller])
+           [org.apache.storm.utils.staticmocking MockedUtils])
   (:import [java.nio.file.attribute FileAttribute])
   (:use [org.apache.storm config testing util timer log])
   (:use [org.apache.storm.daemon common])
@@ -292,7 +291,7 @@
           mock-storm-id "fake-storm-id"
           mock-worker-id "fake-worker-id"
           mock-mem-onheap 512
-          mock-cp (str Utils/filePathSeparator "base" Utils/classPathSeparator Utils/filePathSeparator "stormjar.jar")
+          mock-cp (str Utils/FILE_PATH_SEPARATOR "base" Utils/CLASS_PATH_SEPARATOR Utils/FILE_PATH_SEPARATOR "stormjar.jar")
           mock-sensitivity "S3"
           mock-cp "/base:/stormjar.jar"
           exp-args-fn (fn [opts topo-opts classpath]
@@ -316,9 +315,9 @@
                                 "-Dworkers.artifacts=/tmp/workers-artifacts"
                                 "-Dstorm.conf.file="
                                 "-Dstorm.options="
-                                (str "-Dstorm.log.dir=" Utils/filePathSeparator "logs")
+                                (str "-Dstorm.log.dir=" Utils/FILE_PATH_SEPARATOR "logs")
                                 (str "-Dlogging.sensitivity=" mock-sensitivity)
-                                (str "-Dlog4j.configurationFile=" Utils/filePathSeparator "log4j2" Utils/filePathSeparator "worker.xml")
+                                (str "-Dlog4j.configurationFile=" Utils/FILE_PATH_SEPARATOR "log4j2" Utils/FILE_PATH_SEPARATOR "worker.xml")
                                 "-DLog4jContextSelector=org.apache.logging.log4j.core.selector.BasicContextSelector"
                                 (str "-Dstorm.id=" mock-storm-id)
                                 (str "-Dworker.id=" mock-worker-id)
@@ -403,7 +402,7 @@
                                         (Matchers/any)))))))
 
       (testing "testing topology.classpath is added to classpath"
-        (let [topo-cp (str Utils/filePathSeparator "any" Utils/filePathSeparator "path")
+        (let [topo-cp (str Utils/FILE_PATH_SEPARATOR "any" Utils/FILE_PATH_SEPARATOR "path")
               exp-args (exp-args-fn [] [] (Utils/addToClasspath mock-cp [topo-cp]))
               mock-supervisor {:conf {STORM-CLUSTER-MODE :distributed}}
               mocked-supervisor-storm-conf {TOPOLOGY-CLASSPATH topo-cp}
@@ -416,7 +415,7 @@
               utils-spy (->>
                           (proxy [Utils] []
                             (currentClasspathImpl []
-                              (str Utils/filePathSeparator "base"))
+                              (str Utils/FILE_PATH_SEPARATOR "base"))
                             (launchProcessImpl [& _] nil))
                           Mockito/spy)]
           (with-open [_ (ConfigUtilsInstaller. cu-proxy)
@@ -450,7 +449,7 @@
               utils-spy (->>
                           (proxy [Utils] []
                             (currentClasspathImpl []
-                              (str Utils/filePathSeparator "base"))
+                              (str Utils/FILE_PATH_SEPARATOR "base"))
                             (launchProcessImpl [& _] nil))
                           Mockito/spy)]
           (with-open [_ (ConfigUtilsInstaller. cu-proxy)

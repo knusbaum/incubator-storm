@@ -17,7 +17,7 @@
   (:import [org.apache.storm.generated SupervisorInfo NodeInfo Assignment WorkerResources
             StormBase TopologyStatus ClusterWorkerHeartbeat ExecutorInfo ErrorInfo Credentials RebalanceOptions KillOptions
             TopologyActionOptions DebugOptions ProfileRequest]
-           [org.apache.storm.utils Utils IFn])
+           [org.apache.storm.utils Utils])
   (:use [org.apache.storm util stats log])
   (:require [org.apache.storm.daemon [common :as common]]))
 
@@ -83,17 +83,6 @@
         (fn [list-of-executors]
           (into [] list-of-executors)) ; list of executors must be coverted to clojure vector to ensure it is sortable.
         executor->node_port))))
-;(defn clojurify-executor->node_port [executor->node_port]
-;  (into {}
-;    (Utils/mapVal
-;      (reify IFn (eval [this nodeInfo]
-;        (concat [(.get_node nodeInfo)] (.get_port nodeInfo)))) ;nodeInfo should be converted to [node,port1,port2..]
-;      (map-key
-;        (fn [list-of-executors]
-;          (into [] list-of-executors)) ; list of executors must be coverted to clojure vector to ensure it is sortable.
-;        executor->node_port))))
-
-
 
 (defn clojurify-worker->resources [worker->resources]
   "convert worker info to be [node, port]
@@ -151,9 +140,6 @@
       (if (:num-workers rebalance-options)
         (.set_num_workers thrift-rebalance-options (int (:num-workers rebalance-options))))
       (if (:component->executors rebalance-options)
-;        (.set_num_executors thrift-rebalance-options (Utils/mapVal
-;                                                       (reify IFn (eval [this x] (int x)))
-;                                                       (:component->executors rebalance-options))))
         (.set_num_executors thrift-rebalance-options (map-val int (:component->executors rebalance-options))))
       thrift-rebalance-options)))
 
@@ -208,15 +194,10 @@
     (.set_launch_time_secs (int (:launch-time-secs storm-base)))
     (.set_status (convert-to-status-from-symbol (:status storm-base)))
     (.set_num_workers (int (:num-workers storm-base)))
-    ;(.set_component_executors (Utils/mapVal (reify IFn (eval [this x] (int x))) (:component->executors storm-base)))
     (.set_component_executors (map-val int (:component->executors storm-base)))
     (.set_owner (:owner storm-base))
     (.set_topology_action_options (thriftify-topology-action-options storm-base))
     (.set_prev_status (convert-to-status-from-symbol (:prev-status storm-base)))
-;    (.set_component_debug
-;      (Utils/mapVal
-;        (reify IFn (eval [this x] (thriftify-debugoptions x)))
-;        (:component->debug storm-base)))))
     (.set_component_debug (map-val thriftify-debugoptions (:component->debug storm-base)))))
 
 ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
@@ -231,17 +212,12 @@
       (.get_owner storm-base)
       (clojurify-topology-action-options (.get_topology_action_options storm-base))
       (convert-to-symbol-from-status (.get_prev_status storm-base))
-;      (Utils/mapVal
-;        (reify IFn (eval [this x] (clojurify-debugoptions x)))
-;        (.get_component_debug storm-base)))))
       (map-val clojurify-debugoptions (.get_component_debug storm-base)))))
 
 ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defn thriftify-stats [stats]
   (if stats
-;    (Utils/mapVal
-;      (reify IFn (eval [this x] (thriftify-executor-stats x)))
     (map-val thriftify-executor-stats
       (map-key #(ExecutorInfo. (int (first %1)) (int (last %1)))
         stats))
@@ -251,8 +227,6 @@
 ;TODO: when translating this function, you should replace the map-val with a proper for loop HERE
 (defn clojurify-stats [stats]
   (if stats
-;    (Utils/mapVal
-;      (reify IFn (eval [this x] (clojurify-executor-stats x)))
     (map-val clojurify-executor-stats
       (map-key (fn [x] (list (.get_task_start x) (.get_task_end x)))
         stats))
