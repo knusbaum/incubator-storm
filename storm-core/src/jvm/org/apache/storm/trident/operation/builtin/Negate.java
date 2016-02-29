@@ -50,11 +50,12 @@ import org.apache.storm.trident.tuple.TridentTuple;
  * ```
  *
  */
-public class Negate implements Filter {
+public class Negate extends DelegateResourceDeclarer implements Filter {
     
     Filter _delegate;
-    
+
     public Negate(Filter delegate) {
+        super(delegate)
         _delegate = delegate;
     }
 

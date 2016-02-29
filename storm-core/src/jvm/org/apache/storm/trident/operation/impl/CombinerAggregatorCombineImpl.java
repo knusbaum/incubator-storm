@@ -25,7 +25,7 @@ import org.apache.storm.trident.operation.TridentCollector;
 import org.apache.storm.trident.operation.TridentOperationContext;
 import org.apache.storm.trident.tuple.TridentTuple;
 
-public class CombinerAggregatorCombineImpl implements Aggregator<Result> {
+public class CombinerAggregatorCombineImpl extends DefaultResourceDeclarer implements Aggregator<Result> {
     CombinerAggregator _agg;
     
     public CombinerAggregatorCombineImpl(CombinerAggregator agg) {

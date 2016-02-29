@@ -26,10 +26,11 @@ import org.apache.storm.trident.tuple.TridentTuple;
 
 // works by emitting null to the collector. since the planner knows this is an ADD node with
 // no new output fields, it just passes the tuple forward
-public class FilterExecutor implements Function {
+public class FilterExecutor extends DelegateResourceDeclarer implements Function {
     Filter _filter;
 
     public FilterExecutor(Filter filter) {
+        super(filter)
         _filter = filter;
     }
     

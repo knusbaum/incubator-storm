@@ -18,23 +18,13 @@
 package org.apache.storm.trident.operation.impl;
 
 import java.util.Map;
-import org.apache.storm.trident.operation.Filter;
-import org.apache.storm.trident.operation.TridentOperationContext;
+import org.apache.storm.trident.operation.BaseFilter;
 import org.apache.storm.trident.tuple.TridentTuple;
 
-public class TrueFilter implements Filter {
+public class TrueFilter extends BaseFilter {
 
     @Override
     public boolean isKeep(TridentTuple tuple) {
         return true;
     }
-
-    @Override
-    public void prepare(Map conf, TridentOperationContext context) {
-    }
-
-    @Override
-    public void cleanup() {
-    }
-    
 }

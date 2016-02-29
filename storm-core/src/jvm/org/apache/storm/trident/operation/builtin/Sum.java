@@ -22,7 +22,7 @@ import org.apache.storm.trident.operation.CombinerAggregator;
 import org.apache.storm.trident.tuple.TridentTuple;
 
 
-public class Sum implements CombinerAggregator<Number> {
+public class Sum extends DefaultResourceDeclarer implements CombinerAggregator<Number> {
 
     @Override
     public Number init(TridentTuple tuple) {

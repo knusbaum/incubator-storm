@@ -28,7 +28,7 @@ import org.apache.storm.trident.tuple.TridentTuple;
 import org.apache.storm.trident.tuple.TridentTupleView;
 import org.apache.storm.trident.tuple.TridentTupleView.ProjectionFactory;
 
-public class ChainedAggregatorImpl implements Aggregator<ChainedResult> {
+public class ChainedAggregatorImpl extends DefaultResourceDeclarer implements Aggregator<ChainedResult> {
     Aggregator[] _aggs;
     ProjectionFactory[] _inputFactories;
     ComboList.Factory _fact;

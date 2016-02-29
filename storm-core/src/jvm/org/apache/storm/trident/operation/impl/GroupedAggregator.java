@@ -30,7 +30,7 @@ import org.apache.storm.trident.tuple.TridentTuple;
 import org.apache.storm.trident.tuple.TridentTupleView;
 import org.apache.storm.trident.tuple.TridentTupleView.ProjectionFactory;
 
-public class GroupedAggregator implements Aggregator<Object[]> {
+public class GroupedAggregator extends DefaultResourceDeclarer implements Aggregator<Object[]> {
     ProjectionFactory _groupFactory;
     ProjectionFactory _inputFactory;
     Aggregator _agg;

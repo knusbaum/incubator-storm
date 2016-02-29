@@ -24,7 +24,7 @@ import java.util.Map;
  *
  * Provides no-op implementations of the `prepare()` and `cleanup()` methods.
  */
-public class BaseOperation implements Operation {
+public class BaseOperation extends DefaultResourceDeclarer implements Operation {
 
     /**
      * No-op implementation.

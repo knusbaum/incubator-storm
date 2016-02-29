@@ -33,7 +33,7 @@ import org.apache.storm.trident.tuple.TridentTuple;
  * An {@link org.apache.storm.trident.operation.Assembly} implementation
  *
  */
-public class FirstN implements Assembly {
+public class FirstN extends DelegateResourceDeclarer implements Assembly {
 
     Aggregator _agg;
     
@@ -47,6 +47,7 @@ public class FirstN implements Assembly {
         } else {
             _agg = new FirstNAgg(n);
         }
+        super(_agg)
     }
     
     @Override

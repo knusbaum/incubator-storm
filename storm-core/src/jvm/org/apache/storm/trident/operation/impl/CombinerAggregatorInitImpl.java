@@ -25,11 +25,12 @@ import org.apache.storm.trident.operation.TridentCollector;
 import org.apache.storm.trident.operation.TridentOperationContext;
 import org.apache.storm.trident.tuple.TridentTuple;
 
-public class CombinerAggregatorInitImpl implements Function {
+public class CombinerAggregatorInitImpl extends DelegateResourceDeclarer implements Function {
 
     CombinerAggregator _agg;
     
     public CombinerAggregatorInitImpl(CombinerAggregator agg) {
+        super(agg);
         _agg = agg;
     }
     
@@ -45,5 +46,4 @@ public class CombinerAggregatorInitImpl implements Function {
     @Override
     public void cleanup() {
     }
-    
 }
