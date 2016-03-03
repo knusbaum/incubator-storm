@@ -20,6 +20,7 @@ package org.apache.storm.trident.operation.impl;
 import org.apache.storm.tuple.Values;
 import java.util.Map;
 import org.apache.storm.trident.operation.CombinerAggregator;
+import org.apache.storm.trident.operation.DelegateResourceDeclarer;
 import org.apache.storm.trident.operation.Function;
 import org.apache.storm.trident.operation.TridentCollector;
 import org.apache.storm.trident.operation.TridentOperationContext;

@@ -19,6 +19,7 @@ package org.apache.storm.trident.operation.builtin;
 
 import clojure.lang.Numbers;
 import org.apache.storm.trident.operation.CombinerAggregator;
+import org.apache.storm.trident.operation.DefaultResourceDeclarer;
 import org.apache.storm.trident.tuple.TridentTuple;
 
 

@@ -15,44 +15,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.storm.trident.operation;
 
+import java.util.Map;
+import java.util.HashMap;
+import org.apache.storm.trident.operation.ITridentResource;
 import org.apache.storm.topology.ResourceDeclarer;
 
 public abstract class DelegateResourceDeclarer implements ResourceDeclarer, ITridentResource {
     private Object _delegate;
 
-    private DelegateResourceDeclarer(Object delegate) {
+    protected DelegateResourceDeclarer(Object delegate) {
         _delegate = delegate;
     }
-    
+
     @Override
-    public Negate setMemoryLoad(Number onHeap) {
+    public DelegateResourceDeclarer setMemoryLoad(Number onHeap) {
         if(_delegate instanceof ResourceDeclarer) {
-            _delegate.setMemoryLoad(onHeap);
+            ((ResourceDeclarer)_delegate).setMemoryLoad(onHeap);
         }
         return this;
     }
 
     @Override
-    public Negate setMemoryLoad(Number onHeap, number offHeap) {
+    public DelegateResourceDeclarer setMemoryLoad(Number onHeap, Number offHeap) {
         if(_delegate instanceof ResourceDeclarer) {
-            _delegate.setMemoryLoad(onHeap, offHeap);
+            ((ResourceDeclarer)_delegate).setMemoryLoad(onHeap, offHeap);
         }
         return this;
     }
 
     @Override
-    public Negate setCPULoad(Number amount) {
+    public DelegateResourceDeclarer setCPULoad(Number amount) {
         if(_delegate instanceof ResourceDeclarer) {
-            _delegate.setCPULoad(amount);
+            ((ResourceDeclarer)_delegate).setCPULoad(amount);
         }
         return this;
     }
 
     @Override
-    public Map<String, Object> getResources() {
+    public Map<String, Number> getResources() {
         if(_delegate instanceof ITridentResource) {
-            return _delegate.getResources();
+            return ((ITridentResource)_delegate).getResources();
         }
         return new HashMap<>();
     }

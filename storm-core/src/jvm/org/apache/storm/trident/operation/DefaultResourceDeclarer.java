@@ -25,7 +25,7 @@ import org.apache.storm.topology.ResourceDeclarer;
 
 public class DefaultResourceDeclarer implements ResourceDeclarer, ITridentResource {
 
-    private Map<String, Object> resources = new HashMap<>();
+    private Map<String, Number> resources = new HashMap<>();
     private Map conf = Utils.readStormConfig();
 
     @Override
@@ -56,7 +56,7 @@ public class DefaultResourceDeclarer implements ResourceDeclarer, ITridentResour
     }
 
     @Override
-    public Map<String, Object> getResources() {
-        return new HashMap<String, Object>(resources);
+    public Map<String, Number> getResources() {
+        return new HashMap<String, Number>(resources);
     }
 }

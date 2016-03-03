@@ -18,6 +18,7 @@
 package org.apache.storm.trident.operation.impl;
 
 import java.util.Map;
+import org.apache.storm.trident.operation.DelegateResourceDeclarer;
 import org.apache.storm.trident.operation.Filter;
 import org.apache.storm.trident.operation.Function;
 import org.apache.storm.trident.operation.TridentCollector;
@@ -30,7 +31,7 @@ public class FilterExecutor extends DelegateResourceDeclarer implements Function
     Filter _filter;
 
     public FilterExecutor(Filter filter) {
-        super(filter)
+        super(filter);
         _filter = filter;
     }
     

@@ -20,5 +20,5 @@ package org.apache.storm.trident.operation;
 import java.util.Map;
 
 public interface ITridentResource {
-    Map<String, Object> getResources();
+    Map<String, Number> getResources();
 }

@@ -21,6 +21,7 @@ import org.apache.storm.tuple.Fields;
 import java.util.List;
 import java.util.Map;
 import org.apache.storm.trident.operation.Aggregator;
+import org.apache.storm.trident.operation.DefaultResourceDeclarer;
 import org.apache.storm.trident.operation.TridentCollector;
 import org.apache.storm.trident.operation.TridentOperationContext;
 import org.apache.storm.trident.tuple.ComboList;

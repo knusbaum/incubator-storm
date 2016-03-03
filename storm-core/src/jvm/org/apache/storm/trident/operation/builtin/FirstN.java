@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.PriorityQueue;
 import org.apache.storm.trident.Stream;
 import org.apache.storm.trident.operation.Aggregator;
+import org.apache.storm.trident.operation.DelegateResourceDeclarer;
 import org.apache.storm.trident.operation.Assembly;
 import org.apache.storm.trident.operation.BaseAggregator;
 import org.apache.storm.trident.operation.TridentCollector;
@@ -40,14 +41,22 @@ public class FirstN extends DelegateResourceDeclarer implements Assembly {
     public FirstN(int n, String sortField) {
         this(n, sortField, false);
     }
+
+    public static Aggregator getAgg(int n, String sortField, boolean reverse) {
+        if(sortField!=null) {
+            return new FirstNSortedAgg(n, sortField, reverse);
+        } else {
+            return new FirstNAgg(n);
+        }
+    }
     
     public FirstN(int n, String sortField, boolean reverse) {
-        if(sortField!=null) {
-            _agg = new FirstNSortedAgg(n, sortField, reverse);
-        } else {
-            _agg = new FirstNAgg(n);
-        }
-        super(_agg)
+        this(n, sortField, reverse, getAgg(n, sortField, reverse));
+    }
+
+    private FirstN(int n, String sortField, boolean reverse, Aggregator agg) {
+        super(agg);
+        _agg = agg;
     }
     
     @Override
