@@ -19,10 +19,11 @@ package org.apache.storm.trident.operation;
 
 import java.util.Map;
 import java.util.HashMap;
+import java.io.Serializable;
 import org.apache.storm.trident.operation.ITridentResource;
 import org.apache.storm.topology.ResourceDeclarer;
 
-public abstract class DelegateResourceDeclarer implements ResourceDeclarer, ITridentResource {
+public class DelegateResourceDeclarer implements Serializable, ResourceDeclarer, ITridentResource {
     private Object _delegate;
 
     protected DelegateResourceDeclarer(Object delegate) {
