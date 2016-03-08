@@ -20,14 +20,14 @@ package org.apache.storm.trident.operation.impl;
 import java.io.Serializable;
 import java.util.Map;
 import org.apache.storm.trident.operation.Aggregator;
-import org.apache.storm.trident.operation.DefaultResourceDeclarer;
+import org.apache.storm.trident.operation.DelegateResourceDeclarer;
 import org.apache.storm.trident.operation.TridentCollector;
 import org.apache.storm.trident.operation.TridentOperationContext;
 import org.apache.storm.trident.operation.impl.SingleEmitAggregator.SingleEmitState;
 import org.apache.storm.trident.tuple.TridentTuple;
 
 
-public class SingleEmitAggregator extends DefaultResourceDeclarer implements Aggregator<SingleEmitState> {
+public class SingleEmitAggregator extends DelegateResourceDeclarer implements Aggregator<SingleEmitState> {
     public static interface BatchToPartition extends Serializable {
         int partitionIndex(Object batchId, int numPartitions);
     }
@@ -46,6 +46,7 @@ public class SingleEmitAggregator extends DefaultResourceDeclarer implements Agg
     BatchToPartition _batchToPartition;
     
     public SingleEmitAggregator(Aggregator agg, BatchToPartition batchToPartition) {
+        super(agg);
         _agg = agg;
         _batchToPartition = batchToPartition;
     }

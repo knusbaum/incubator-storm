@@ -18,6 +18,7 @@
 package org.apache.storm.trident.planner.processor;
 
 import org.apache.storm.task.TopologyContext;
+import org.apache.storm.trident.operation.DelegateResourceDeclarer;
 import org.apache.storm.trident.operation.FlatMapFunction;
 import org.apache.storm.trident.operation.Function;
 import org.apache.storm.trident.operation.MapFunction;
@@ -35,7 +36,7 @@ import java.util.Map;
  * Processor for executing {@link org.apache.storm.trident.Stream#map(MapFunction)} and
  * {@link org.apache.storm.trident.Stream#flatMap(FlatMapFunction)} functions.
  */
-public class MapProcessor implements TridentProcessor {
+public class MapProcessor extends DelegateResourceDeclarer implements TridentProcessor {
     Function _function;
     TridentContext _context;
     FreshCollector _collector;
@@ -43,6 +44,7 @@ public class MapProcessor implements TridentProcessor {
     TridentTupleView.ProjectionFactory _projection;
 
     public MapProcessor(Fields inputFields, Function function) {
+        super(function);
         _function = function;
         _inputFields = inputFields;
     }

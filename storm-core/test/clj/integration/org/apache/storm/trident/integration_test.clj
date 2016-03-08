@@ -46,7 +46,7 @@
         (bind word-counts
           (-> topo
               (.newStream "tester" feeder)
-              (.each (fields "sentence") (Split.) (fields "word"))
+              (.each (fields "sentence") (. (Split.) setCPULoad 100) (fields "word"))
               (.groupBy (fields "word"))
               (.persistentAggregate (memory-map-state) (Count.) (fields "count"))
               (.parallelismHint 6)
@@ -57,8 +57,10 @@
             (.stateQuery word-counts (fields "args") (TupleCollectionGet.) (fields "word" "count"))
             (.project (fields "word" "count")))
         (with-topology [cluster topo storm-topo]
-          (log-message "Halloooooo")
-          (map #(log-message "WOWOWOWOWO" (.. % get_value get_common get_json_conf)) (. storm-topo get_bolts))
+          (log-message "Getting json confs from bolts:")
+          (log-message "Bolts: " (. storm-topo get_bolts) "(" (. storm-topo get_bolts_size) ")")
+          (doall (map (fn [[k v]] (log-message k ":" (.. v get_common get_json_conf))) (. storm-topo get_bolts)))
+          (log-message "Done!")
           (feed feeder [["hello the man said"] ["the"]])
           (is (= #{["hello" 1] ["said" 1] ["the" 2] ["man" 1]}
                  (into #{} (exec-drpc drpc "all-tuples" "man"))))

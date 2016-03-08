@@ -21,7 +21,7 @@ import org.apache.storm.tuple.Fields;
 import java.util.List;
 import java.util.Map;
 import org.apache.storm.trident.operation.Aggregator;
-import org.apache.storm.trident.operation.DefaultResourceDeclarer;
+import org.apache.storm.trident.operation.ITridentResource;
 import org.apache.storm.trident.operation.TridentCollector;
 import org.apache.storm.trident.operation.TridentOperationContext;
 import org.apache.storm.trident.tuple.ComboList;
@@ -29,7 +29,7 @@ import org.apache.storm.trident.tuple.TridentTuple;
 import org.apache.storm.trident.tuple.TridentTupleView;
 import org.apache.storm.trident.tuple.TridentTupleView.ProjectionFactory;
 
-public class ChainedAggregatorImpl extends DefaultResourceDeclarer implements Aggregator<ChainedResult> {
+public class ChainedAggregatorImpl implements Aggregator<ChainedResult>, ITridentResource {
     Aggregator[] _aggs;
     ProjectionFactory[] _inputFactories;
     ComboList.Factory _fact;
@@ -110,5 +110,27 @@ public class ChainedAggregatorImpl extends DefaultResourceDeclarer implements Ag
        for(Aggregator a: _aggs) {
            a.cleanup();
        } 
-    } 
+    }
+
+    @Override
+    public Map<String, Number> getResources() {
+        // Sum up all the aggregators' resources
+        Map<String, Number> ret = new HashMap<String, Number>();
+        for(Aggregator a: _aggs) {
+            if(a instanceof ITridentResource) {
+                ITridentResource aggRes = (ITridentResource)a;
+                for(Map.Entry<String, Number> entry : aggRes.getResources().entrySet()) {
+                    String k = entry.getKey();
+                    Number val = entry.getValue();
+                    if(ret.containsKey(k)) {
+                        val = new Number(val.doubleValue() + ret.get(k).doubleValue());
+                    }
+                    ret.put(k, val);
+                }
+            }
+        }
+
+        return ret;
+    }
+    
 }

@@ -400,19 +400,20 @@ public class TridentTopology {
 
         for(SpoutNode sn: spoutNodes) {
             Integer parallelism = parallelisms.get(grouper.nodeGroup(sn));
+
+            Map<String, Number> spoutRes = null;
+            
+            if(sn instanceof ITridentResource) {
+                spoutRes = mergeDefaultResources(((ITridentResource)sn).getResources(), defaults);
+            }
+            else {
+                spoutRes = mergeDefaultResources(null, defaults);
+            }
+            Number onHeap = spoutRes.get(Config.TOPOLOGY_COMPONENT_RESOURCES_ONHEAP_MEMORY_MB);
+            Number offHeap = spoutRes.get(Config.TOPOLOGY_COMPONENT_RESOURCES_OFFHEAP_MEMORY_MB);
+            Number cpuLoad = spoutRes.get(Config.TOPOLOGY_COMPONENT_CPU_PCORE_PERCENT);                
+            
             if(sn.type == SpoutNode.SpoutType.DRPC) {
-
-                Map<String, Number> spoutRes = null;
-
-                if(sn instanceof ITridentResource) {
-                    spoutRes = mergeDefaultResources(((ITridentResource)sn).getResources(), defaults);
-                }
-                else {
-                    spoutRes = mergeDefaultResources(null, defaults);
-                }
-                Number onHeap = spoutRes.get(Config.TOPOLOGY_COMPONENT_RESOURCES_ONHEAP_MEMORY_MB);
-                Number offHeap = spoutRes.get(Config.TOPOLOGY_COMPONENT_RESOURCES_OFFHEAP_MEMORY_MB);
-                Number cpuLoad = spoutRes.get(Config.TOPOLOGY_COMPONENT_CPU_PCORE_PERCENT);                
 
                 builder.setBatchPerTupleSpout(spoutIds.get(sn), sn.streamId,
                                               (IRichSpout) sn.spout, parallelism, batchGroupMap.get(sn))
@@ -428,7 +429,9 @@ public class TridentTopology {
                     throw new RuntimeException("Regular rich spouts not supported yet... try wrapping in a RichSpoutBatchExecutor");
                     // TODO: handle regular rich spout without batches (need lots of updates to support this throughout)
                 }
-                builder.setSpout(spoutIds.get(sn), sn.streamId, sn.txId, s, parallelism, batchGroupMap.get(sn));
+                builder.setSpout(spoutIds.get(sn), sn.streamId, sn.txId, s, parallelism, batchGroupMap.get(sn))
+                    .setMemoryLoad(onHeap, offHeap)
+                    .setCPULoad(cpuLoad);
             }
         }
 

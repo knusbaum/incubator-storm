@@ -22,6 +22,7 @@ import org.apache.storm.tuple.Fields;
 import java.util.List;
 import java.util.Map;
 import org.apache.storm.trident.operation.Aggregator;
+import org.apache.storm.trident.operation.DelegateResourceDeclarer;
 import org.apache.storm.trident.operation.TridentOperationContext;
 import org.apache.storm.trident.planner.ProcessorContext;
 import org.apache.storm.trident.planner.TridentProcessor;
@@ -30,7 +31,7 @@ import org.apache.storm.trident.tuple.TridentTuple.Factory;
 import org.apache.storm.trident.tuple.TridentTupleView.ProjectionFactory;
 
 
-public class AggregateProcessor implements TridentProcessor {
+public class AggregateProcessor extends DelegateResourceDeclarer implements TridentProcessor {
     Aggregator _agg;
     TridentContext _context;
     FreshCollector _collector;
@@ -38,6 +39,7 @@ public class AggregateProcessor implements TridentProcessor {
     ProjectionFactory _projection;
 
     public AggregateProcessor(Fields inputFields, Aggregator agg) {
+        super(agg);
         _agg = agg;
         _inputFields = inputFields;
     }

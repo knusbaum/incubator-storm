@@ -21,6 +21,7 @@ import org.apache.storm.task.TopologyContext;
 import org.apache.storm.tuple.Fields;
 import java.util.List;
 import java.util.Map;
+import org.apache.storm.trident.operation.DelegateResourceDeclarer;
 import org.apache.storm.trident.operation.Function;
 import org.apache.storm.trident.operation.TridentOperationContext;
 import org.apache.storm.trident.planner.ProcessorContext;
@@ -30,7 +31,7 @@ import org.apache.storm.trident.tuple.TridentTuple.Factory;
 import org.apache.storm.trident.tuple.TridentTupleView.ProjectionFactory;
 
 
-public class EachProcessor implements TridentProcessor {
+public class EachProcessor extends DelegateResourceDeclarer implements TridentProcessor {
     Function _function;
     TridentContext _context;
     AppendCollector _collector;
@@ -38,6 +39,7 @@ public class EachProcessor implements TridentProcessor {
     ProjectionFactory _projection;
     
     public EachProcessor(Fields inputFields, Function function) {
+        super(function);
         _function = function;
         _inputFields = inputFields;
     }
