@@ -17,7 +17,7 @@
  */
 package org.apache.storm.trident.planner;
 
-import org.apache.storm.trident.operation.DelegateResourceDeclarer;
+import org.apache.storm.trident.operation.ITridentResource;
 import org.apache.storm.tuple.Fields;
 import java.io.Serializable;
 import java.util.UUID;
@@ -26,7 +26,7 @@ import org.apache.commons.lang.builder.ToStringBuilder;
 import org.apache.commons.lang.builder.ToStringStyle;
 
 
-public class Node extends DefaultResourceDeclarer implements Serializable {
+public class Node implements Serializable, ITridentResource {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     
     private String nodeId;
@@ -37,6 +37,7 @@ public class Node extends DefaultResourceDeclarer implements Serializable {
     public Integer parallelismHint = null;
     public NodeStateInfo stateInfo = null;
     public int creationIndex;
+    public Object resourceHolder = null;
     
     public Node(String streamId, String name, Fields allOutputFields) {
         this.nodeId = UUID.randomUUID().toString();
@@ -44,6 +45,15 @@ public class Node extends DefaultResourceDeclarer implements Serializable {
         this.streamId = streamId;
         this.name = name;
         this.creationIndex = INDEX.incrementAndGet();
+    }
+
+    public Node(String streamId, String name, Fields allOutputFields, Object resourceHolder) {
+        this.nodeId = UUID.randomUUID().toString();
+        this.allOutputFields = allOutputFields;
+        this.streamId = streamId;
+        this.name = name;
+        this.creationIndex = INDEX.incrementAndGet();
+        this.resourceHolder = resourceHolder;
     }
 
     @Override
@@ -62,5 +72,13 @@ public class Node extends DefaultResourceDeclarer implements Serializable {
     @Override
     public String toString() {
         return ToStringBuilder.reflectionToString(this, ToStringStyle.MULTI_LINE_STYLE);
+    }
+
+    @Override
+    public Map<String, Number> getResources() {
+        if(resourceHolder != null && resourceHolder instanceof ITridentResource) {
+            return resourceHolder.getResources();
+        }
+        return new HashMap();
     }
 }

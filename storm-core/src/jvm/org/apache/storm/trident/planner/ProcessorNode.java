@@ -26,7 +26,7 @@ public class ProcessorNode extends Node {
     public Fields selfOutFields;
     
     public ProcessorNode(String streamId, String name, Fields allOutputFields, Fields selfOutFields, TridentProcessor processor) {
-        super(streamId, name, allOutputFields);
+        super(streamId, name, allOutputFields, resourceHolder);
         this.processor = processor;
         this.selfOutFields = selfOutFields;
     }
